@@ -16,7 +16,7 @@ require(dplyr)
 ```{r}
 MP_all <- read.csv("/Users/freyakeyser/Documents/Acadia/ACER/Masters/Overall spreadsheets:figures/Detections_MP_2011-2013.csv")
 
-#MP_2011 <- subset(MP_all, year=="2011")
+MP_2011 <- subset(MP_all, year=="2011")
 MP_2012 <- subset(MP_all, year>2011)
 MP_2012$Date.and.Time..UTC. <- ymd_hms(MP_2012$Date.and.Time..UTC.)
 MP_2012 <- subset(MP_2012, Date.and.Time..UTC. < "2013-04-01 00:00:00")
@@ -29,26 +29,27 @@ receiver$Deploy.Date.and.Time <- ymd_hms(receiver$Deploy.Date.and.Time)
 receiver$Deploy.year <- year(receiver$Deploy.Date.and.Time)
 
 tagging <- read.csv("/Users/freyakeyser/Documents/Acadia/ACER/Masters/Overall spreadsheets:figures/Tagging metadata.csv")
-#tagging_2011 <- subset(tagging, year=="2011")
+tagging_2011 <- subset(tagging, year=="2011")
 tagging_2012 <- subset(tagging, year=="2012")
 ```
 
 ## Tables 4.1 - 4.3: Summarize Minas Passage detections in 2011 and 2012  
 ```{r} 
-# MP_2011$MP_Array <- MP_2011$Station.Name
-# MP_2011$MP_Array <- as.character(MP_2011$MP_Array)
-# MP_2011$MP_Array[MP_2011$MP_Array %in% c("AUL-T1", "AUL-T2", "AUL-T3")] <- "FORCE"
-# MP_2011$MP_Array[MP_2011$MP_Array %in% c("AUL-01", "AUL-02", "AUL-03", "AUL-04", "AUL-05", 
-#                                          "AUL-06", "AUL-07", "AUL-08", "AUL-09", "AUL-10", 
-#                                          "AUL-11", "AUL-12", "AUL-13", "AUL-14")] <- "AUL"
-# MP_2011$MP_Array[MP_2011$MP_Array %in% c("MPS-01", "MPS-02", "MPS-03", "MPS-04", 
-#                                          "MPS-05", "MPS-06", "MPS-07", "MPS-08", 
-#                                          "MPS-09", "MPS-10", "MPS-11", "MPS-12")] <- "MPS"
-# 
-# length(unique(MP_2011$Fish.code))
-# FORCE_2011 <- subset(MP_2011, Station.Name=="AUL-T3"|Station.Name=="AUL-T2"|Station.Name=="AUL-T1")
-# length(unique(FORCE_2011$Fish.code))
-# 
+MP_2011$MP_Array <- MP_2011$Station.Name
+MP_2011$MP_Array <- as.character(MP_2011$MP_Array)
+MP_2011$MP_Array[MP_2011$MP_Array %in% c("AUL-T1", "AUL-T2", "AUL-T3")] <- "FORCE"
+MP_2011$MP_Array[MP_2011$MP_Array %in% c("AUL-01", "AUL-02", "AUL-03", "AUL-04", "AUL-05", 
+                                         "AUL-06", "AUL-07", "AUL-08", "AUL-09", "AUL-10", 
+                                         "AUL-11", "AUL-12", "AUL-13", "AUL-14")] <- "AUL"
+MP_2011$MP_Array[MP_2011$MP_Array %in% c("MPS-01", "MPS-02", "MPS-03", "MPS-04", 
+                                         "MPS-05", "MPS-06", "MPS-07", "MPS-08", 
+                                         "MPS-09", "MPS-10", "MPS-11", "MPS-12")] <- "MPS"
+
+length(unique(MP_2011$Fish.code))
+
+FORCE_2011 <- subset(MP_2011, Station.Name=="AUL-T3"|Station.Name=="AUL-T2"|Station.Name=="AUL-T1")
+length(unique(FORCE_2011$Fish.code))
+
 # MP_2011_ind_array <- ddply(.data=MP_2011,
 #                            .(MP_Array, Capture.location),
 #                            summarize,
@@ -63,17 +64,17 @@ tagging_2012 <- subset(tagging, year=="2012")
 #                            .(Capture.location),
 #                            summarize,
 #                            n=length(unique(Fish.code)))
-# 
-# # Calculate number of days at liberty for each fish at each receiver.
-# 
-# #### Separate receiver data by year
-# 
-# passagereceivers2011 <- receiver %>%
-#   filter(Deploy.year==2011 & Array %in% c("MPS", "NSP")) %>%
-#   arrange(Deploy.Date.and.Time)
-# passagereceivers2011_1 <- passagereceivers2011[1:29,]
-# passagereceivers2011_2 <- passagereceivers2011[36,]
-# passagereceivers2011 <- rbind(passagereceivers2011_1, passagereceivers2011_2)
+
+# Calculate number of days at liberty for each fish at each receiver.
+
+#### Separate receiver data by year
+
+passagereceivers2011 <- receiver %>%
+  filter(Deploy.year==2011 & Array %in% c("MPS", "NSP")) %>%
+  arrange(Deploy.Date.and.Time)
+passagereceivers2011_1 <- passagereceivers2011[1:29,]
+passagereceivers2011_2 <- passagereceivers2011[36,]
+passagereceivers2011 <- rbind(passagereceivers2011_1, passagereceivers2011_2)
 
 passagereceivers2012 <- receiver %>%
   filter(Deploy.year=="2012" & Array %in% c("MPS", "NSP")) %>%
@@ -83,27 +84,39 @@ passagereceivers2012 <- passagereceivers2012[order(passagereceivers2012$Deploy.D
 passagereceivers2012_summer <- passagereceivers2012[1:24,]
 passagereceivers2012_winter <- passagereceivers2012[25:47,]
 
+rm(passagereceivers2011_1)
+rm(passagereceivers2011_2)
+
 #### Create dataframe with all combinations of receivers and transmitters
-# daysatliberty2011 <- expand.grid(Fish.code = tagging_2011$Fish.code, Station.Name = passagereceivers2011$Station.Name)
-# 
-# daysatliberty2011 <-join(daysatliberty2011, passagereceivers2011, by="Station.Name", type="left")
-# daysatliberty2011 <- select(daysatliberty2011, Fish.code, Array, Station.Name, CDN, Deploy.Date.and.Time, Recover.Date.and.Time, Latitude, Longitude, Receiver, Deploy.year)
-# daysatliberty2011 <-join(daysatliberty2011, tagging_2011, by="Fish.code", type="left")
-# daysatliberty2011$Release.date.time <- paste(daysatliberty2011$Release.date, daysatliberty2011$Release.time)
-# daysatliberty2011$Release.date.time <- ymd_hms(daysatliberty2011$Release.date.time)
-# daysatliberty2011$tag.end <- daysatliberty2011$Release.date.time + days(daysatliberty2011$Est.tag.life)
-# daysatliberty2011$Recover.Date.and.Time <- ymd_hms(daysatliberty2011$Recover.Date.and.Time)
-# daysatliberty2011$tag.end <- ymd_hms(daysatliberty2011$tag.end)
-# daysatliberty2011$end.test <- ifelse(daysatliberty2011$tag.end > daysatliberty2011$Recover.Date.and.Time, "recovery", "tag dead")
-# daysatliberty2011$true.end <- ifelse(daysatliberty2011$end.test == "recovery", as.character(daysatliberty2011$Recover.Date.and.Time), as.character(daysatliberty2011$tag.end))
-# daysatliberty2011$Days.at.liberty <- difftime(daysatliberty2011$true.end, daysatliberty2011$Release.date.time)
-# daysatliberty2011$Days.at.liberty <- ceiling(daysatliberty2011$Days.at.liberty)
-# daysatliberty2011$Days.at.liberty <- as.numeric(daysatliberty2011$Days.at.liberty)
+daysatliberty2011 <- expand.grid(Fish.code = tagging_2011$Fish.code, Station.Name = passagereceivers2011$Station.Name)
+
+daysatliberty2011 <-join(daysatliberty2011, passagereceivers2011, by="Station.Name", type="left")
+
+daysatliberty2011 <- select(daysatliberty2011, Fish.code, Array, Station.Name, CDN, Deploy.Date.and.Time, Recover.Date.and.Time, Latitude, Longitude, Receiver, Deploy.year)
+
+daysatliberty2011 <-join(daysatliberty2011, tagging_2011, by="Fish.code", type="left")
+
+daysatliberty2011$Release.date.time <- paste(daysatliberty2011$Release.date, daysatliberty2011$Release.time)
+daysatliberty2011$Release.date.time <- ymd_hms(daysatliberty2011$Release.date.time)
+
+daysatliberty2011$tag.end <- daysatliberty2011$Release.date.time + days(daysatliberty2011$Est.tag.life)
+daysatliberty2011$tag.end <- ymd_hms(daysatliberty2011$tag.end)
+
+daysatliberty2011$Recover.Date.and.Time <- ymd_hms(daysatliberty2011$Recover.Date.and.Time)
+
+daysatliberty2011$end.test <- ifelse(daysatliberty2011$tag.end > daysatliberty2011$Recover.Date.and.Time, "recovery", "tag dead")
+
+daysatliberty2011$true.end <- ifelse(daysatliberty2011$end.test == "recovery", as.character(daysatliberty2011$Recover.Date.and.Time), as.character(daysatliberty2011$tag.end))
+
+daysatliberty2011$Days.at.liberty <- difftime(daysatliberty2011$true.end, daysatliberty2011$Release.date.time)
+daysatliberty2011$Days.at.liberty <- ceiling(daysatliberty2011$Days.at.liberty)
+daysatliberty2011$Days.at.liberty <- as.numeric(daysatliberty2011$Days.at.liberty)
+
 # mean(daysatliberty2011$Days.at.liberty, na.rm=TRUE)
-# 
-# daysatliberty2011_GP <- subset(daysatliberty2011, Capture.location=="Grand Pré")
-# daysatliberty2011_Stew <- subset(daysatliberty2011, Capture.location=="Stewiacke")
-# 
+
+daysatliberty2011_GP <- subset(daysatliberty2011, Capture.location=="Grand Pré")
+daysatliberty2011_Stew <- subset(daysatliberty2011, Capture.location=="Stewiacke")
+
 # mean(daysatliberty2011_GP$Days.at.liberty, na.rm=TRUE)
 # mean(daysatliberty2011_Stew$Days.at.liberty, na.rm=TRUE)
 
@@ -119,14 +132,15 @@ MP_2012$MP_Array[MP_2012$MP_Array %in% c("MPS-01", "MPS-02", "MPS-03", "MPS-04",
                                          "MPS-09", "MPS-10", "MPS-11", "MPS-12")] <- "MPS"
 
 # length(unique(MP_2012$Fish.code))
-# FORCE_2012 <- subset(MP_2012, MP_Array=="FORCE")
+
+FORCE_2012 <- subset(MP_2012, MP_Array=="FORCE")
 # length(unique(FORCE_2012$Fish.code))
 
 MP_2012 <- subset(MP_2012, !Station.Name%in%c("AUL-T1"))
 
-# MP_2012_summer <- subset(MP_2012, year==2012 & month<12)
-# MP_2012_summer$Date <- floor_date(MP_2012_summer$Date.and.Time..UTC., unit="day")
-# 
+MP_2012_summer <- subset(MP_2012, year==2012 & month<12)
+MP_2012_summer$Date <- floor_date(MP_2012_summer$Date.and.Time..UTC., unit="day")
+
 # MP_2012_ind_array <- ddply(.data=MP_2012_summer,
 #                            .(MP_Array, Capture.location),
 #                            summarize,
@@ -163,28 +177,40 @@ MP_2012_winter$Date <- floor_date(MP_2012_winter$Date.and.Time..UTC., unit="day"
 
 ### All days at liberty possibilities (all combinations of fish codes vs. stations)
 
-# passagereceivers2012_summer$Final.Recover <- as.Date("2012-12-01 00:00:00")
-# 
-# daysatliberty2012_summer <- expand.grid(Fish.code = tagging_2012$Fish.code, Station.Name = passagereceivers2012_summer$Station.Name)
-# daysatliberty2012_summer <-join(daysatliberty2012_summer, passagereceivers2012_summer, by="Station.Name", type="left")
-# daysatliberty2012_summer <- select(daysatliberty2012_summer, Fish.code, Array, Station.Name, CDN, Deploy.Date.and.Time, Recover.Date.and.Time, Latitude, Longitude, Receiver, Deploy.year, Final.Recover)
-# daysatliberty2012_summer <-join(daysatliberty2012_summer, tagging_2012, by="Fish.code", type="left")
-# daysatliberty2012_summer$Release.date.time <- paste(daysatliberty2012_summer$Release.date, daysatliberty2012_summer$Release.time)
-# daysatliberty2012_summer$Release.date.time <- ymd_hms(daysatliberty2012_summer$Release.date.time)
-# daysatliberty2012_summer$tag.end <- daysatliberty2012_summer$Release.date.time + days(daysatliberty2012_summer$Est.tag.life)
-# daysatliberty2012_summer$Final.Recover <- ymd(daysatliberty2012_summer$Final.Recover)
-# daysatliberty2012_summer$tag.end <- ymd_hms(daysatliberty2012_summer$tag.end)
-# daysatliberty2012_summer$end.test <- ifelse(daysatliberty2012_summer$tag.end > daysatliberty2012_summer$Final.Recover, "recovery", "tag dead")
-# daysatliberty2012_summer$true.end <- ifelse(daysatliberty2012_summer$end.test == "recovery", as.character(daysatliberty2012_summer$Final.Recover), as.character(daysatliberty2012_summer$tag.end))
-# daysatliberty2012_summer$Days.at.liberty <- difftime(daysatliberty2012_summer$true.end, daysatliberty2012_summer$Release.date.time)
-# daysatliberty2012_summer$Days.at.liberty <- ceiling(daysatliberty2012_summer$Days.at.liberty)
-# daysatliberty2012_summer$Days.at.liberty <- as.numeric(daysatliberty2012_summer$Days.at.liberty)
+passagereceivers2012_summer$Final.Recover <- as.Date("2012-12-01 00:00:00")
+
+daysatliberty2012_summer <- expand.grid(Fish.code = tagging_2012$Fish.code, Station.Name = passagereceivers2012_summer$Station.Name)
+
+daysatliberty2012_summer <-join(daysatliberty2012_summer, passagereceivers2012_summer, by="Station.Name", type="left")
+
+daysatliberty2012_summer <- select(daysatliberty2012_summer, Fish.code, Array, Station.Name, CDN, Deploy.Date.and.Time, Recover.Date.and.Time, Latitude, Longitude, Receiver, Deploy.year, Final.Recover)
+
+daysatliberty2012_summer <-join(daysatliberty2012_summer, tagging_2012, by="Fish.code", type="left")
+
+daysatliberty2012_summer$Release.date.time <- paste(daysatliberty2012_summer$Release.date, daysatliberty2012_summer$Release.time)
+daysatliberty2012_summer$Release.date.time <- ymd_hms(daysatliberty2012_summer$Release.date.time)
+
+daysatliberty2012_summer$tag.end <- daysatliberty2012_summer$Release.date.time + days(daysatliberty2012_summer$Est.tag.life)
+daysatliberty2012_summer$tag.end <- ymd_hms(daysatliberty2012_summer$tag.end)
+
+daysatliberty2012_summer$Final.Recover <- ymd(daysatliberty2012_summer$Final.Recover)
+
+daysatliberty2012_summer$end.test <- ifelse(daysatliberty2012_summer$tag.end > daysatliberty2012_summer$Final.Recover, "recovery", "tag dead")
+
+daysatliberty2012_summer$true.end <- ifelse(daysatliberty2012_summer$end.test == "recovery", as.character(daysatliberty2012_summer$Final.Recover), as.character(daysatliberty2012_summer$tag.end))
+
+daysatliberty2012_summer$Days.at.liberty <- difftime(daysatliberty2012_summer$true.end, daysatliberty2012_summer$Release.date.time)
+daysatliberty2012_summer$Days.at.liberty <- ceiling(daysatliberty2012_summer$Days.at.liberty)
+daysatliberty2012_summer$Days.at.liberty <- as.numeric(daysatliberty2012_summer$Days.at.liberty)
+
 # mean(daysatliberty2012_summer$Days.at.liberty)
-# 
-# daysatliberty2012_GP_summer <- subset(daysatliberty2012_summer, Capture.location=="Grand Pré")
-# daysatliberty2012_Stew_summer <- subset(daysatliberty2012_summer, Capture.location=="Stewiacke")
-# daysatliberty2012_Kings_summer <- subset(daysatliberty2012_summer, Capture.location=="Kingsport")
-# 
+
+daysatliberty2012_GP_summer <- subset(daysatliberty2012_summer, Capture.location=="Grand Pré")
+
+daysatliberty2012_Stew_summer <- subset(daysatliberty2012_summer, Capture.location=="Stewiacke")
+
+daysatliberty2012_Kings_summer <- subset(daysatliberty2012_summer, Capture.location=="Kingsport")
+
 # mean(daysatliberty2012_GP_summer$Days.at.liberty)
 # mean(daysatliberty2012_Stew_summer$Days.at.liberty)
 # mean(daysatliberty2012_Kings_summer$Days.at.liberty)
@@ -204,23 +230,30 @@ daysatliberty2012_winter <- expand.grid(Fish.code = tagging_2012_winter$Fish.cod
 
 daysatliberty2012_winter <-join(daysatliberty2012_winter, passagereceivers2012_winter, by="Station.Name", type="left")
 daysatliberty2012_winter <-join(daysatliberty2012_winter, tagging_2012_winter, by="Fish.code", type="left")
+
 daysatliberty2012_winter$Release.date <- ymd(daysatliberty2012_winter$Release.date)
 daysatliberty2012_winter$Final.Recover <- ymd(daysatliberty2012_winter$Final.Recover)
 daysatliberty2012_winter$tag.end <- ymd(daysatliberty2012_winter$tag.end)
+
 daysatliberty2012_winter$end.test <- ifelse(daysatliberty2012_winter$tag.end > daysatliberty2012_winter$Final.Recover, "recovery", "tag dead")
+
 daysatliberty2012_winter$true.end <- ifelse(daysatliberty2012_winter$end.test == "recovery", as.character(daysatliberty2012_winter$Final.Recover), as.character(daysatliberty2012_winter$tag.end))
+
 daysatliberty2012_winter$Days.at.liberty <- difftime(daysatliberty2012_winter$true.end, daysatliberty2012_winter$Release.date)
 daysatliberty2012_winter$Days.at.liberty <- ceiling(daysatliberty2012_winter$Days.at.liberty)
 daysatliberty2012_winter$Days.at.liberty <- as.numeric(daysatliberty2012_winter$Days.at.liberty)
-mean(daysatliberty2012_winter$Days.at.liberty)
+
+# mean(daysatliberty2012_winter$Days.at.liberty)
 
 daysatliberty2012_GP_winter <- subset(daysatliberty2012_winter, Capture.location=="Grand Pré")
+
 daysatliberty2012_Stew_winter <- subset(daysatliberty2012_winter, Capture.location=="Stewiacke")
+
 daysatliberty2012_Kings_winter <- subset(daysatliberty2012_winter, Capture.location=="Kingsport")
 
-mean(daysatliberty2012_GP_winter$Days.at.liberty)
-mean(daysatliberty2012_Stew_winter$Days.at.liberty)
-mean(daysatliberty2012_Kings_winter$Days.at.liberty)
+# mean(daysatliberty2012_GP_winter$Days.at.liberty)
+# mean(daysatliberty2012_Stew_winter$Days.at.liberty)
+# mean(daysatliberty2012_Kings_winter$Days.at.liberty)
 
 ```
 

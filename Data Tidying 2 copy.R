@@ -14,7 +14,7 @@ require(ggplot2)
 
 # Make column names consistent
 names(MP2011) <- c("Date.and.Time..UTC.", "Month", "Detection.Number", "Transmitter", "Fish.Code", "Fish.Number", "Sensor.Value", "Detection.Depth", "Height.above.bottom", "Station.Name", "Depth", "Receiver", "Latitude", "Longitude", "Tagging.location", "Fork.Length", "Fork.Length.Bin", "Array", "Date_Time.AST.ADT", "Hour.AST", "Sunrise.Date_Time.UTC", "Sunrise.Date_Time.AST", "Sunset.Date_Time.UTC", "Sunset.Date_Time.AST", "Day", "Night", "Twilight", "Day_Night_Twilight")
-names(MB2011)
+
 
 # Subset for only necessary detection information columns
 MP2011 <- subset(MP2011, select=c("Date.and.Time..UTC.", "Receiver", "Transmitter", "Sensor.Value"))    
@@ -24,24 +24,24 @@ gasp2011 <- subset(gasp2011, select=c("Date.and.Time..UTC.", "Receiver", "Transm
 
 # Make data format consistent between spreadsheets
 MB2011$Receiver <- as.factor(MB2011$Receiver)
-levels(MB2011$Receiver)
+
 cols <- colsplit(MB2011$Receiver, "-", c("alpha", "numeric"))
 cols$complete <- ifelse(is.na(cols$numeric), cols$alpha, cols$numeric)
 MB2011$Receiver <- as.character(cols$complete)
 
 MB2011$Transmitter <- as.factor(MB2011$Transmitter)
-levels(MB2011$Transmitter)
+
 cols <- colsplit(MB2011$Transmitter, "-", c("alpha", "middle", "numeric"))
 MB2011$Transmitter <- as.character(cols$numeric)
 
 gasp2011$Receiver <- as.factor(gasp2011$Receiver)
-levels(gasp2011$Receiver)
+
 cols <- colsplit(gasp2011$Receiver, "-", c("alpha", "numeric"))
 cols$complete <- ifelse(is.na(cols$numeric), cols$alpha, cols$numeric)
 gasp2011$Receiver <- as.character(cols$complete)
 
 gasp2011$Transmitter <- as.factor(gasp2011$Transmitter)
-levels(gasp2011$Transmitter)
+
 cols <- colsplit(gasp2011$Transmitter, "-", c("alpha", "middle", "numeric"))
 gasp2011$Transmitter <- as.character(cols$numeric)
 
