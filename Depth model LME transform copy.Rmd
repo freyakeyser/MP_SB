@@ -1,0 +1,1795 @@
+========================
+Modelling swimming depth
+========================
+
+```{r}
+require(ggplot2)
+require(plyr)
+require(reshape2)
+require(grid)
+require(gridExtra)
+require(knitr)
+require(car)
+require(lme4)
+require(MuMIn)
+require(lubridate)
+
+opts_chunk$set(out.width='750px', dpi=200)
+```
+
+### Setting up data
+```{r}
+detections_withCS <- read.csv("/Users/freyakeyser/Documents/Acadia/ACER/Masters/Overall spreadsheets:figures/Passage/Current Model from Brian (Jan 8)/Detections_MP_2011-2013_minimal_H_el_u_v.csv")
+
+detections_withCS$Date.and.Time..UTC. <- ymd_hms(detections_withCS$Date.and.Time..UTC.)
+
+detections_withCS$speed <- sqrt((detections_withCS$u.m.s)^2 + (detections_withCS$v.m.s)^2)
+
+detects_final_MP$Date.and.Time..UTC. <- ymd_hms(detects_final_MP$Date.and.Time..UTC.)
+
+detects_final_ALL_withCS <- join(detects_final_MP, detections_withCS, type="left", by=c("Date.and.Time..UTC.", "Fish.code", "Station.Name"))
+
+levels(detects_final_ALL_withCS$Station.Name)
+
+detects_final_ALL_withCS$year <- year(detects_final_ALL_withCS$Date.and.Time..UTC.)
+
+detects_final_ALL_withCS_recode <- subset(detects_final_ALL_withCS, year=="2011" & Array=="NSP")
+detects_final_ALL_withCS_recode$Station.Name.New <- detects_final_ALL_withCS_recode$Station.Name
+detects_final_ALL_withCS_recode$Station.Name.New <- as.character(detects_final_ALL_withCS_recode$Station.Name.New)
+detects_final_ALL_withCS_recode$Station.Name.New <- as.factor(detects_final_ALL_withCS_recode$Station.Name.New)
+levels(detects_final_ALL_withCS_recode$Station.Name.New) <- c("A1-01", "A1-02", "A1-03", "A1-04", "A1-05", "A1-06", "A1-07", "A1-08", "A1-09", "A1-10", "A1-11", "A1-12", "A1-13", "A1-14", "A1-T1", "A1-T2", "A1-T3")
+
+detects_final_ALL_withCS_recode2 <- subset(detects_final_ALL_withCS, (year=="2012" | year=="2013") & Array=="NSP")
+detects_final_ALL_withCS_recode2$Station.Name.New <- detects_final_ALL_withCS_recode2$Station.Name
+detects_final_ALL_withCS_recode2$Station.Name.New <- as.character(detects_final_ALL_withCS_recode2$Station.Name.New)
+detects_final_ALL_withCS_recode2$Station.Name.New <- as.factor(detects_final_ALL_withCS_recode2$Station.Name.New)
+levels(detects_final_ALL_withCS_recode2$Station.Name.New) <- c("A2-01", "A2-02", "A2-03", "A2-04", "A2-05", "A2-06", "A2-07", "A2-08", "A2-09", "A2-10", "A2-11", "A2-12")
+
+detects_final_MPS_withCS <- subset(detects_final_ALL_withCS, Array=="MPS")
+detects_final_MPS_withCS$Station.Name.New <-  detects_final_MPS_withCS$Station.Name
+
+detects_final_ALL_withCS_2 <- join(detects_final_MPS_withCS, detects_final_ALL_withCS_recode, type="full")
+detects_final_ALL_withCS_2 <- join(detects_final_ALL_withCS_2, detects_final_ALL_withCS_recode2, type="full")
+
+detects_final_ALL_withCS_2 <- subset(detects_final_ALL_withCS_2, select=c("Fish.code", "Array", "Detection.depth", "Station.Name.New", "Date.and.Time..UTC.", "season", "sunriseUTC", "sunsetUTC", "daynight", "year", "Transmitter", "Receiver", "Latitude", "Longitude", "H.m.", "elev.m.", "u.m.s.", "v.m.s.", "speed"))
+```
+
+### Adding new variables, fixing old ones
+```{r}
+### Tide direction
+detects_final_ALL_withCS_2$Tide.direction <- ifelse(detects_final_ALL_withCS_2$u.m.s. < 0, "Ebb", "Flood")
+
+### Water column depth
+detects_final_ALL_withCS_2$watercolumn <- detects_final_ALL_withCS_2$H.m. + detects_final_ALL_withCS_2$elev.m.
+
+### Month
+detects_final_ALL_withCS_2$month <- month(detects_final_ALL_withCS_2$Date.and.Time..UTC.)
+
+### Adding fish data
+detects_final_ALL_withCS_2_tag <- join(detects_final_ALL_withCS_2, tagging, type="left", by="Fish.code")
+
+### Subsetting to get useful columns only
+depthmodeldf <- subset(detects_final_ALL_withCS_2_tag, select=c("Date.and.Time..UTC.", "Fish.code", "Station.Name.New", "Latitude", "Longitude", "Detection.depth", "Capture.location", "Length", "year", "month", "speed", "Tide.direction", "watercolumn", "daynight"))
+
+depthmodeldf$season <- ifelse(depthmodeldf$month<12 & depthmodeldf$month>4, "Spring/Summer/Fall", "Winter")
+
+depthmodeldf$year <- as.factor(depthmodeldf$year)
+```
+
+### From Modelling.Rmd, going with log transform:
+```{r}
+depthmodeldf$logdepth <- log10(depthmodeldf$Detection.depth +1)
+depth_lm_2 <- lm(logdepth ~ daynight + year + watercolumn + speed + month + Capture.location + Length, data=depthmodeldf)
+residuals_lm_2 <- resid(depth_lm_2, type="response")
+fitted_lm_2 <- fitted(depth_lm_2)
+op <- par(mfrow=c(3,2), mar=c(4,4,3,2))
+ylabel <- "residuals"
+plot(x=fitted_lm_2, y=residuals_lm_2, xlab="Fitted values", ylab=ylabel)
+boxplot(residuals_lm_2 ~ daynight, data=depthmodeldf, main="Day or night", ylab=ylabel)
+boxplot(residuals_lm_2 ~ month, data=depthmodeldf, main="Month", ylab=ylabel)
+boxplot(residuals_lm_2 ~ Capture.location, data=depthmodeldf, main="Tagging location", ylab=ylabel)
+plot(x=depthmodeldf$speed, y=residuals_lm_2, ylab=ylabel, xlab="speed")
+plot(x=depthmodeldf$Length, y=residuals_lm_2, ylab=ylabel, xlab="length")
+### Looking better...
+```
+
+### Trying log transform with LME (depth_lme_1)
+```{r}
+depth_lme_1 <- lmer(logdepth ~ daynight + year + watercolumn + speed + month + Capture.location + Length + (1|Fish.code) + (1|Station.Name.New), data = depthmodeldf)
+residuals_lme_1 <- resid(depth_lme_1, type="response")
+fitted_lme_1 <- fitted(depth_lme_1)
+op <- par(mfrow=c(4,2), mar=c(4,4,3,2))
+ylabel <- "residuals"
+plot(x=fitted_lme_1, y=residuals_lme_1, xlab="Fitted values", ylab=ylabel)
+qqnorm(residuals_lme_1)
+hist(residuals_lme_1)
+boxplot(residuals_lme_1 ~ daynight, data=depthmodeldf, main="Day or night", ylab=ylabel)
+boxplot(residuals_lme_1 ~ month, data=depthmodeldf, main="Month", ylab=ylabel)
+boxplot(residuals_lme_1 ~ Capture.location, data=depthmodeldf, main="Tagging location", ylab=ylabel)
+plot(x=depthmodeldf$speed, y=residuals_lme_1, ylab=ylabel, xlab="speed")
+plot(x=depthmodeldf$Length, y=residuals_lme_1, ylab=ylabel, xlab="length")
+## Much better
+```
+
+### Trying sqrt transform with LME (depth_lme_2)
+```{r}
+depthmodeldf$sqrtdepth <- sqrt(depthmodeldf$Detection.depth)
+depth_lme_2 <- lmer(sqrtdepth ~ daynight + year + watercolumn + speed + month + Capture.location + Length + (1|Fish.code) + (1|Station.Name.New), data = depthmodeldf)
+residuals_lme_2 <- resid(depth_lme_2, type="response")
+fitted_lme_2 <- fitted(depth_lme_2)
+op <- par(mfrow=c(4,2), mar=c(4,4,3,2))
+ylabel <- "residuals"
+plot(x=fitted_lme_2, y=residuals_lme_2, xlab="Fitted values", ylab=ylabel)
+qqnorm(residuals_lme_2)
+hist(residuals_lme_2)
+boxplot(residuals_lme_2 ~ daynight, data=depthmodeldf, main="Day or night", ylab=ylabel)
+boxplot(residuals_lme_2 ~ month, data=depthmodeldf, main="Month", ylab=ylabel)
+boxplot(residuals_lme_2 ~ Capture.location, data=depthmodeldf, main="Tagging location", ylab=ylabel)
+plot(x=depthmodeldf$speed, y=residuals_lme_2, ylab=ylabel, xlab="speed")
+plot(x=depthmodeldf$Length, y=residuals_lme_2, ylab=ylabel, xlab="length")
+## Looks good as well. Plots for sqrt look better than log.
+```
+
+### Compare log and sqrt
+```{r}
+AIC(depth_lme_1, depth_lme_2)
+### log is better
+```
+
+### Trying gamma distribution with LME. From Dr. B. Bolker: Gamma distributions have a reasonably clear interpretation in a failure-time model, especially for integer shape parameters (waiting times until a certain number of events happen); log-Normal distributions are the natural outcome of a geometric random walk, so they might make sense for the outcome of growth processes (individual or population).
+```{r}
+# depth_lme_3 <- glmer(Detection.depth ~ daynight + year + watercolumn + speed + Tide.direction + month + Length + (1|Fish.code) + (1|Station.Name), data = depthmodeldf, family=Gamma(link=log))
+# Warning messages:
+# 1: In checkConv(attr(opt, "derivs"), opt$par, ctrl = control$checkConv,  :
+#   Model failed to converge with max|grad| = 0.0570429 (tol = 0.001, component 5)
+# 2: In checkConv(attr(opt, "derivs"), opt$par, ctrl = control$checkConv,  :
+#   Model is nearly unidentifiable: very large eigenvalue
+#  - Rescale variables?;Model is nearly unidentifiable: large eigenvalue ratio
+#  - Rescale variables?
+### NOT GOING TO GO FORWARD WITH GAMMA!
+```
+
+### Checking for collinearity using vif.mer function from https://hlplab.wordpress.com/2011/02/24/diagnosing-collinearity-in-lme4/ (depth_lme_1.1 and depth_lme_2.1)
+```{r}
+vif.mer <- function (fit) {
+    ## adapted from rms::vif
+
+    v <- vcov(fit)
+    nam <- names(fixef(fit))
+
+    ## exclude intercepts
+    ns <- sum(1 * (nam == "Intercept" | nam == "(Intercept)"))
+    if (ns > 0) {
+        v <- v[-(1:ns), -(1:ns), drop = FALSE]
+        nam <- nam[-(1:ns)]
+    }
+
+    d <- diag(v)^0.5
+    v <- diag(solve(v/(d %o% d)))
+    names(v) <- nam
+    v
+}
+
+vif.mer(depth_lme_1)
+
+depth_lme_1.1 <- update(depth_lme_1, .~. - Capture.location)
+summary(depth_lme_1.1)
+residuals_lme_1.1 <- resid(depth_lme_1.1, type="response")
+fitted_lme_1.1 <- fitted(depth_lme_1.1)
+ylabel <- "residuals"
+plot(x=fitted_lme_1.1, y=residuals_lme_1.1, xlab="Fitted values", ylab=ylabel)
+qqnorm(residuals_lme_1.1)
+hist(residuals_lme_1.1)
+vif.mer(depth_lme_1.1)
+
+vif.mer(depth_lme_2)
+depth_lme_2.1 <- update(depth_lme_2, .~. - Capture.location)
+summary(depth_lme_2.1)
+residuals_lme_2.1 <- resid(depth_lme_2.1, type="response")
+fitted_lme_2.1 <- fitted(depth_lme_2.1)
+ylabel <- "residuals"
+plot(x=fitted_lme_2.1, y=residuals_lme_2.1, xlab="Fitted values", ylab=ylabel)
+qqnorm(residuals_lme_2.1)
+hist(residuals_lme_2.1)
+vif.mer(depth_lme_2.1)
+```
+
+### Trying interaction terms with log transform (depth_lme_1.1_int)
+```{r}
+# daynight:watercolumn + daynight:speed + daynight:Tide.direction + daynight:month + daynight:Length + month:Length + speed:month + speed:watercolumn + speed:Tide.direction + speed:Length + Length:watercolumn + watercolumn:month
+
+depth_lme_1.1_int <- update(depth_lme_1.1, .~. + daynight:watercolumn + daynight:speed + daynight:Tide.direction + daynight:month + daynight:Length + month:Length + speed:month + speed:watercolumn + speed:Tide.direction + speed:Length + Length:watercolumn + watercolumn:month)
+summary(depth_lme_1.1_int)
+residuals_lme_1.1_int <- resid(depth_lme_1.1_int, type="response")
+fitted_lme_1.1_int <- fitted(depth_lme_1.1_int)
+ylabel <- "residuals"
+plot(x=fitted_lme_1.1_int, y=residuals_lme_1.1_int, xlab="Fitted values", ylab=ylabel)
+qqnorm(residuals_lme_1.1_int)
+hist(residuals_lme_1.1_int)
+vif.mer(depth_lme_1.1_int)
+```
+
+### Taking out insignificant interaction terms (depth_lme_1.1_int2)
+```{r}
+depth_lme_1.1_int2 <- update(depth_lme_1.1_int, .~. - daynight:Tide.direction - speed:watercolumn - speed:Tide.direction)
+summary(depth_lme_1.1_int2)
+residuals_lme_1.1_int2 <- resid(depth_lme_1.1_int2, type="response")
+fitted_lme_1.1_int2 <- fitted(depth_lme_1.1_int2)
+ylabel <- "residuals"
+plot(x=fitted_lme_1.1_int2, y=residuals_lme_1.1_int2, xlab="Fitted values", ylab=ylabel)
+qqnorm(residuals_lme_1.1_int2)
+hist(residuals_lme_1.1_int2)
+vif.mer(depth_lme_1.1_int2)
+```
+
+### Interaction terms with 2.1
+```{r}
+depth_lme_2.1_int <- update(depth_lme_2.1, .~. + daynight:watercolumn + daynight:speed + daynight:month + daynight:Length + month:Length + speed:month + speed:watercolumn + speed:Length + Length:watercolumn + watercolumn:month)
+summary(depth_lme_2.1_int)
+residuals_lme_2.1_int <- resid(depth_lme_2.1_int, type="response")
+fitted_lme_2.1_int <- fitted(depth_lme_2.1_int)
+ylabel <- "residuals"
+plot(x=fitted_lme_2.1_int, y=residuals_lme_2.1_int, xlab="Fitted values", ylab=ylabel)
+qqnorm(residuals_lme_2.1_int)
+hist(residuals_lme_2.1_int)
+vif.mer(depth_lme_2.1_int)
+
+Anova(depth_lme_2.1_int)
+
+depth_lme_2.1_int2 <- update(depth_lme_2.1_int, .~. -daynight:watercolumn - daynight:speed - speed:Length - watercolumn:Length - year)
+summary(depth_lme_2.1_int2)
+Anova(depth_lme_2.1_int2)
+residuals_lme_2.1_int2 <- resid(depth_lme_2.1_int2, type="response")
+fitted_lme_2.1_int2 <- fitted(depth_lme_2.1_int2)
+ylabel <- "residuals"
+plot(x=fitted_lme_2.1_int2, y=residuals_lme_2.1_int2, xlab="Fitted values", ylab=ylabel)
+qqnorm(residuals_lme_2.1_int2)
+hist(residuals_lme_2.1_int2)
+vif.mer(depth_lme_2.1_int2)
+```
+
+### Model comparisons
+```{r}
+AIC(depth_lme_2,
+    depth_lme_2.1,
+    depth_lme_2.1_int,
+    depth_lme_2.1_int2)
+
+BIC(depth_lme_1,
+    depth_lme_2,
+    depth_lme_1.1,
+    depth_lme_2.1,
+    depth_lme_1.1_int,
+    depth_lme_1.1_int2,
+    depth_lme_2.1_int,
+    depth_lme_2.1_int2)
+
+anova(depth_lme_1.1, depth_lme_2.1)
+anova(depth_lme_1.1_int, depth_lme_1.1_int2)
+anova(depth_lme_2.1_int, depth_lme_2.1_int2)
+```
+
+### Predicting data from depth_lme_1.1_int
+```{r}
+depthmodeldf$predict_1.1_int <- predict(depth_lme_1.1_int, depthmodeldf)
+
+speed1 <- ggplot() + geom_point(data=depthmodeldf, aes(speed, logdepth), colour="red") + figure_theme
+speed2 <- ggplot() + geom_point(data=depthmodeldf, aes(speed, predict_1.1_int), colour="blue") + figure_theme
+
+month1 <- ggplot() + geom_jitter(data=depthmodeldf, aes(month, logdepth), colour="red") + figure_theme
+month2 <- ggplot() + geom_jitter(data=depthmodeldf, aes(month, predict_1.1_int), colour="blue") + figure_theme
+
+Length1 <- ggplot() + geom_jitter(data=depthmodeldf, aes(Length, logdepth), colour="red") + figure_theme
+Length2 <- ggplot() + geom_jitter(data=depthmodeldf, aes(Length, predict_1.1_int), colour="blue") + figure_theme
+
+daynight1 <- ggplot() + geom_jitter(data=depthmodeldf, aes(daynight, logdepth), colour="red") + figure_theme
+daynight2 <- ggplot() + geom_jitter(data=depthmodeldf, aes(daynight, predict_1.1_int), colour="blue") + figure_theme
+
+grid.arrange(speed1, speed2, month1, month2, Length1, Length2, daynight1, daynight2, nrow=4, main="depth_lme_1.1_int")
+```
+
+### Predicting data from depth_lme_2.1_int
+```{r}
+depthmodeldf$predict_2.1_int2 <- predict(depth_lme_2.1_int2, depthmodeldf)
+
+speed1 <- ggplot() + geom_point(data=depthmodeldf, aes(speed, sqrtdepth), colour="red") + figure_theme
+speed2 <-ggplot() + geom_point(data=depthmodeldf, aes(speed, predict_2.1_int2), colour="blue") + figure_theme
+
+month1 <- ggplot() + geom_jitter(data=depthmodeldf, aes(month, sqrtdepth), colour="red") + figure_theme
+month2 <- ggplot() + geom_jitter(data=depthmodeldf, aes(month, predict_2.1_int2), colour="blue") + figure_theme
+
+Length1 <- ggplot() + geom_jitter(data=depthmodeldf, aes(Length, sqrtdepth), colour="red") + figure_theme
+Length2 <- ggplot() + geom_jitter(data=depthmodeldf, aes(Length, predict_2.1_int2), colour="blue") + figure_theme
+
+daynight1 <- ggplot() + geom_jitter(data=depthmodeldf, aes(daynight, sqrtdepth), colour="red") + figure_theme
+daynight2 <- ggplot() + geom_jitter(data=depthmodeldf, aes(daynight, predict_2.1_int2), colour="blue") + figure_theme
+
+grid.arrange(speed1, speed2, month1, month2, Length1, Length2, daynight1, daynight2, nrow=4, main="depth_lme_2.1_int")
+```
+
+### Significance testing depth_lme_1.1_int, creating, diagnosing, and plotting depth_lme_1.1_int_step
+```{r}
+require(car)
+Anova(depth_lme_1.1_int)
+
+require(lmerTest)
+anova(depth_lme_1.1_int)
+depth_lme_1.1_int_step <- update(depth_lme_1.1_int, .~. - daynight:speed - speed:Length - watercolumn:Length)
+getOption("digits") 
+options(scipen=3)
+summary(depth_lme_1.1_int_step)
+anova(depth_lme_1.1_int_step)
+Anova(depth_lme_1.1_int_step)
+
+residuals_lme_1.1_int_step <- resid(depth_lme_1.1_int_step, type="response")
+fitted_lme_1.1_int_step <- fitted(depth_lme_1.1_int_step)
+ylabel <- "residuals"
+plot(x=fitted_lme_1.1_int_step, y=residuals_lme_1.1_int_step, xlab="Fitted values", ylab=ylabel)
+qqnorm(residuals_lme_1.1_int_step)
+hist(residuals_lme_1.1_int_step)
+
+### QQNorm in GGPLOT2
+qqnormplot <- ggplot(depthmodeldf, aes(sample=residuals_lme_1.1_int_step)) +
+    stat_qq(shape=1, size=3) + figure_theme + ylab("Sample quantiles") + xlab("Theoretical quantiles")
+ 
+AIC(depth_lme_1.1_int_step, depth_lme_1.1_int)
+
+depthmodeldf$predict_lme_1.1_int_step <- predict(depth_lme_1.1_int_step, depthmodeldf)
+speed1 <- ggplot() + geom_point(data=depthmodeldf, aes(speed, logdepth), colour="red") + figure_theme
+speed2 <-ggplot() + geom_point(data=depthmodeldf, aes(speed, predict_lme_1.1_int_step), colour="blue") + figure_theme
+
+month1 <- ggplot() + geom_jitter(data=depthmodeldf, aes(month, logdepth), colour="red") + figure_theme
+month2 <- ggplot() + geom_jitter(data=depthmodeldf, aes(month, predict_lme_1.1_int_step), colour="blue") + figure_theme
+
+Length1 <- ggplot() + geom_jitter(data=depthmodeldf, aes(Length, logdepth), colour="red") + figure_theme
+Length2 <- ggplot() + geom_jitter(data=depthmodeldf, aes(Length, predict_lme_1.1_int_step), colour="blue") + figure_theme
+
+daynight1 <- ggplot() + geom_jitter(data=depthmodeldf, aes(daynight, logdepth), colour="red") + figure_theme
+daynight2 <- ggplot() + geom_jitter(data=depthmodeldf, aes(daynight, predict_lme_1.1_int_step), colour="blue") + figure_theme
+
+grid.arrange(speed1, speed2, month1, month2, Length1, Length2, daynight1, daynight2, nrow=4, main="depth_lme_1.1_int_step")
+
+require(car)
+Anova(depth_lme_1.1_int_step)
+
+cut.fit <- cut(fitted(depth_lme_1.1_int_step), breaks = quantile(fitted(depth_lme_1.1_int_step), probs = seq(0,1, length = 20)))
+table(cut.fit)
+means1 <- tapply(fitted(depth_lme_1.1_int_step), cut.fit, mean)
+var1 <- tapply(residuals(depth_lme_1.1_int_step), cut.fit, var)
+plot(means1, var1, xlab="Fitted values", ylab="Variance of the residuals", pch = 20)
+
+acf(residuals_lme_1.1_int_step)
+require(car)
+durbinWatsonTest(fitted_lme_1.1_int_step)
+plot(residuals(depth_lme_1.1_int_step) [1:100], type="b")
+abline(h=0)
+### Histogram of residuals
+residhist <- ggplot() + geom_histogram(data=depthmodeldf, aes(residuals(depth_lme_1.1_int_step)), fill=NA, colour="black", binwidth=0.1) + figure_theme + xlab("Residuals") + ylab("Frequency") + scale_y_continuous(breaks=seq(0, 3000, 500))
+
+### Residuals vs. fitted
+resvfit <- ggplot() + geom_point(data=depthmodeldf, aes(fitted(depth_lme_1.1_int_step), residuals(depth_lme_1.1_int_step)), shape=1, size=3) + figure_theme + xlab("Fitted values") + ylab("Residuals")
+
+### QQNorm in GGPLOT2
+qqnormplot <- ggplot(depthmodeldf, aes(sample=residuals_lme_1.1_int_step)) +
+    stat_qq(shape=1, size=3) + figure_theme + ylab("Sample quantiles") + xlab("Theoretical quantiles")
+
+ng = nullGrob()
+grid.arrange(arrangeGrob(residhist, resvfit, nrow=1),
+             arrangeGrob(ng, qqnormplot, ng, nrow=1, widths=c(0.5, 1, 0.5)),
+             nrow=2)
+
+AIC(depth_lme_1, depth_lme_1.1, depth_lme_1.1_int, depth_lme_1.1_int2, depth_lme_1.1_int_step)
+AIC(depth_lme_2, depth_lme_2.1, depth_lme_2.1_int, depth_lme_2.1_int2)
+
+formula(depth_lme_1)
+formula(depth_lme_1.1)
+formula(depth_lme_1.1_int)
+formula(depth_lme_1.1_int2)
+formula(depth_lme_1.1_int_step)
+formula(depth_lme_2)
+formula(depth_lme_2.1)
+formula(depth_lme_2.1_int)
+formula(depth_lme_2.1_int2)
+
+depthmodeldf$adj.depth <- 10^(depthmodeldf$predict_lme_1.1_int_step)
+ggplot() + geom_point(data=depthmodeldf, aes(speed, adj.depth))
+ggplot() + geom_point(data=depthmodeldf, aes(speed, Detection.depth))
+hist(depthmodeldf$adj.depth, ylim=c(0,4000))
+hist(depthmodeldf$Detection.depth, ylim=c(0,4000))
+hist(depthmodeldf$predict_lme_1.1_int_step, ylim=c(0,2500), breaks=20, xlim=c(0,3))
+hist(depthmodeldf$logdepth, ylim=c(0,2500), breaks=20, xlim=c(0,3))
+
+depthmodeldf$hour <- hour(depthmodeldf$Date.and.Time..UTC.)
+
+speed3 <- ggplot() + geom_point(data=depthmodeldf, aes(speed, adj.depth), colour="red") + figure_theme + scale_y_reverse()
+month3 <- ggplot() + geom_jitter(data=depthmodeldf, aes(as.factor(month), adj.depth), colour="red") + figure_theme + scale_y_reverse() #+ coord_polar()
+Length3 <- ggplot() + geom_jitter(data=depthmodeldf, aes(Length, adj.depth), colour="red") + figure_theme + scale_y_reverse()
+daynight3 <- ggplot() + geom_jitter(data=depthmodeldf, aes(daynight, adj.depth), colour="red") + figure_theme + scale_y_reverse()
+hour3 <- ggplot() + geom_jitter(data = depthmodeldf, aes(hour, adj.depth, colour=daynight)) + figure_theme + scale_y_reverse() + xlab("Hour (UTC)") + scale_colour_manual(values=c(1, 4))
+year3 <- ggplot() + geom_jitter(data=depthmodeldf, aes(year, adj.depth), colour="red") + figure_theme + scale_y_reverse()
+tide3 <- ggplot() + geom_jitter(data=depthmodeldf, aes(Tide.direction, adj.depth), colour="red") + figure_theme + scale_y_reverse()
+
+grid.arrange(speed3, month3, Length3, daynight3, hour3, year3, tide3, nrow=4)
+
+realspeed3 <- ggplot() + geom_point(data=depthmodeldf, aes(speed, Detection.depth), colour="red") + figure_theme + scale_y_reverse()
+realmonth3 <- ggplot() + geom_jitter(data=depthmodeldf, aes(as.factor(month), Detection.depth), colour="red") + figure_theme + scale_y_reverse() #+ coord_polar()
+realLength3 <- ggplot() + geom_jitter(data=depthmodeldf, aes(Length, Detection.depth), colour="red") + figure_theme + scale_y_reverse()
+realdaynight3 <- ggplot() + geom_jitter(data=depthmodeldf, aes(daynight, Detection.depth), colour="red") + figure_theme + scale_y_reverse()
+realhour3 <- ggplot() + geom_jitter(data = depthmodeldf, aes(hour, Detection.depth, colour=daynight)) + figure_theme + scale_y_reverse() + xlab("Hour (UTC)") + scale_colour_manual(values=c(1, 4))
+realyear3 <- ggplot() + geom_jitter(data=depthmodeldf, aes(year, Detection.depth), colour="red") + figure_theme + scale_y_reverse()
+realtide3 <- ggplot() + geom_jitter(data=depthmodeldf, aes(Tide.direction, Detection.depth), colour="red") + figure_theme + scale_y_reverse()
+
+grid.arrange(realspeed3, realmonth3, realLength3, realdaynight3, realhour3, realyear3, realtide3, nrow=4)
+```
+
+### Removing year (depth_lme_1.1_int_step2)
+```{r}
+### Removing year
+depth_lme_1.1_int_step2 <- update(depth_lme_1.1_int_step, .~. - year)
+```
+
+### Changing month to a factor and removing month interactions (depth_lme_1.1_int_step3)
+```{r}
+depthmodeldf$monthfac <- as.factor(depthmodeldf$month)
+depthmodeldf <- within(depthmodeldf, monthfac <- relevel(monthfac, ref = 11))
+
+depth_lme_1.1_int_step3 <- update(depth_lme_1.1_int_step, .~. - year - month - daynight:month - month:Length - speed:month - watercolumn:month + monthfac)
+```
+
+### Adding in monthfac interactions (depth_lme_1.1_int_step4), and testing
+```{r}
+depth_lme_1.1_int_step4 <- update(depth_lme_1.1_int_step, .~. - year - month - daynight:month - month:Length - speed:month - watercolumn:month + monthfac + daynight:monthfac + monthfac:Length + speed:monthfac +watercolumn:monthfac)
+
+Anova(depth_lme_1.1_int_step4)
+ggplot() + geom_boxplot(data=depthmodeldf, aes(as.factor(month), fitted(depth_lme_1.1_int_step4)))
+
+summary(depth_lme_1.1_int_step4)
+```
+
+### Comparing the different step models
+```{r}
+################ step ####################
+residhist1 <- ggplot() + geom_histogram(data=depthmodeldf, aes(residuals(depth_lme_1.1_int_step)), fill=NA, colour="black", binwidth=0.1) + figure_theme + xlab("Residuals") + ylab("Frequency") + scale_y_continuous(breaks=seq(0, 3000, 500)) + ggtitle("1.1_int_step")
+
+### Residuals vs. fitted
+resvfit1 <- ggplot() + geom_point(data=depthmodeldf, aes(fitted(depth_lme_1.1_int_step), residuals(depth_lme_1.1_int_step)), shape=1, size=3) + figure_theme + xlab("Fitted values") + ylab("Residuals")
+
+### QQNorm in GGPLOT2
+qqnormplot1 <- ggplot(depthmodeldf, aes(sample=residuals(depth_lme_1.1_int_step))) +
+    stat_qq(shape=1, size=3) + figure_theme + ylab("Sample quantiles") + xlab("Theoretical quantiles")
+
+################ step2 ####################
+residhist2 <- ggplot() + geom_histogram(data=depthmodeldf, aes(residuals(depth_lme_1.1_int_step2)), fill=NA, colour="black", binwidth=0.1) + figure_theme + xlab("Residuals") + ylab("Frequency") + scale_y_continuous(breaks=seq(0, 3000, 500)) + ggtitle("1.1_int_step2")
+
+### Residuals vs. fitted
+resvfit2 <- ggplot() + geom_point(data=depthmodeldf, aes(fitted(depth_lme_1.1_int_step2), residuals(depth_lme_1.1_int_step2)), shape=1, size=3) + figure_theme + xlab("Fitted values") + ylab("Residuals")
+
+### QQNorm in GGPLOT2
+qqnormplot2 <- ggplot(depthmodeldf, aes(sample=residuals(depth_lme_1.1_int_step2))) +
+    stat_qq(shape=1, size=3) + figure_theme + ylab("Sample quantiles") + xlab("Theoretical quantiles")
+
+################ step3 ####################
+residhist3 <- ggplot() + geom_histogram(data=depthmodeldf, aes(residuals(depth_lme_1.1_int_step3)), fill=NA, colour="black", binwidth=0.1) + figure_theme + xlab("Residuals") + ylab("Frequency") + scale_y_continuous(breaks=seq(0, 3000, 500)) + ggtitle("1.1_int_step3")
+
+### Residuals vs. fitted
+resvfit3 <- ggplot() + geom_point(data=depthmodeldf, aes(fitted(depth_lme_1.1_int_step3), residuals(depth_lme_1.1_int_step3)), shape=1, size=3) + figure_theme + xlab("Fitted values") + ylab("Residuals")
+
+### QQNorm in GGPLOT2
+qqnormplot3 <- ggplot(depthmodeldf, aes(sample=residuals(depth_lme_1.1_int_step3))) +
+    stat_qq(shape=1, size=3) + figure_theme + ylab("Sample quantiles") + xlab("Theoretical quantiles")
+
+################ step4 ####################
+residhist4 <- ggplot() + geom_histogram(data=depthmodeldf, aes(residuals(depth_lme_1.1_int_step4)), fill=NA, colour="black", binwidth=0.1) + figure_theme + xlab("Residuals") + ylab("Frequency") + scale_y_continuous(breaks=seq(0, 3000, 500)) + ggtitle("1.1_int_step4")
+
+### Residuals vs. fitted
+resvfit4 <- ggplot() + geom_point(data=depthmodeldf, aes(fitted(depth_lme_1.1_int_step4), residuals(depth_lme_1.1_int_step4)), shape=1, size=3) + figure_theme + xlab("Fitted values") + ylab("Residuals")
+
+### QQNorm in GGPLOT2
+qqnormplot4 <- ggplot(depthmodeldf, aes(sample=residuals(depth_lme_1.1_int_step4))) +
+    stat_qq(shape=1, size=3) + figure_theme + ylab("Sample quantiles") + xlab("Theoretical quantiles")
+
+grid.arrange(residhist1, residhist2, residhist3, residhist4, resvfit1, resvfit2, resvfit3, resvfit4, qqnormplot1, qqnormplot2, qqnormplot3, qqnormplot4, nrow=3)
+```
+
+March 27: 
+Need to figure out what the end goal is. If it's to figure out which variables have a significant effect on depth, then I need to build a model. If it's only to figure out whether there is a significant difference between day and night depths, then I only need a statistical test. If it's both, then I need to do both! See papers in Zotero for advice.
+
+### Trying out some statistical tests
+```{r}
+summary(aov(Detection.depth ~ daynight, data=depthmodeldf))
+summary.lm(aov(Detection.depth ~ daynight, data=depthmodeldf))
+plot(as.factor(depthmodeldf$daynight), depthmodeldf$Detection.depth, notch=T)
+ggplot() + geom_bar(data = test, aes((daynight, mean), stat="identity", fill=NA, colour="blue") + 
+  geom_errorbar(data = test, aes(daynight, ymin=mean-(sd/count), ymax=mean+(sd/count)))
+test <- ddply(.data=depthmodeldf,
+              .(daynight), 
+              summarize,
+              mean = mean(Detection.depth),
+              sd = sd(Detection.depth),
+              count = length(Detection.depth))
+
+summary(aov(depth_lme_1.1_int_step))
+anova(depth_lme_1.1_int_step4)
+test.aov <- aov(logdepth ~ daynight + Error(Fish.code/daynight), depthmodeldf)  
+summary(test.aov)
+require(car)
+?linearHypothesis
+class(depth_lme_1.1_int_step4)
+
+require(lattice)
+qqmath(ranef(depth_lme_1.1_int_step4))$Fish.code
+qqmath(ranef(depth_lme_1.1_int_step4))$Station.Name.New
+summary(depth_lme_1.1_int_step4)
+```
+
+### Try out MuMIn package functions
+```{r}
+require(MuMIn)
+options(na.action=na.fail)
+
+# # From MuMIn CRAN PDF
+# # Model selection: ranking by AICc using ML
+#     ms2 <- dredge(depth_lme_1, trace = 2, rank = "AIC", REML = FALSE)
+#     (attr(ms2, "rank.call"))
+#     # Get the models (fitted by REML, as in the global model)
+#     fmList <- get.models(ms2, 1:4)
+#     # Because the models originate from 􏰀dredge(..., rank = AICc, REML = FALSE)􏰀,
+#     # the default weights in 􏰀model.avg􏰀 are ML based:
+#     summary(model.avg(fmList))
+#  par(mar = c(3,5,6,4))
+#     plot(ms2, labAsExpr = TRUE)
+# model.avg(ms2, subset = delta < 4)
+# model.avg(ms2, subset = cumsum(weight) <= .95) # get averaged coefficients
+# summary(get.models(ms2, 1)[[1]])
+# importance(ms2)
+# coefTable(ms2, 1:4)
+### model.sel(fmList) ### GOOD
+
+names(depthmodeldf)
+logsel <- model.sel(depth_lme_1, depth_lme_1.1, depth_lme_1.1_int, depth_lme_1.1_int2, depth_lme_1.1_int_step, depth_lme_1.1_int_step4, rank=AIC)
+```
+
+### Significance testing depth_lme_2.1_int, creating, diagnosing, and plotting depth_lme_2.1_int_step
+```{r}
+require(car)
+Anova(depth_lme_2.1_int)
+summary(depth_lme_2.1_int)
+
+require(lmerTest)
+anova(depth_lme_2.1_int)
+
+depth_lme_2.1_int_step <- update(depth_lme_2.1_int, .~. - daynight:watercolumn - daynight:speed - speed:Length - watercolumn:Length - year)
+getOption("digits") 
+options(scipen=3)
+summary(depth_lme_2.1_int_step)
+anova(depth_lme_2.1_int_step)
+Anova(depth_lme_2.1_int_step)
+
+residuals_lme_2.1_int_step <- resid(depth_lme_2.1_int_step, type="response")
+fitted_lme_2.1_int_step <- fitted(depth_lme_2.1_int_step)
+ylabel <- "residuals"
+plot(x=fitted_lme_2.1_int_step, y=residuals_lme_2.1_int_step, xlab="Fitted values", ylab=ylabel)
+qqnorm(residuals_lme_2.1_int_step)
+hist(residuals_lme_2.1_int_step)
+
+### QQNorm in GGPLOT2
+qqnormplot <- ggplot(depthmodeldf, aes(sample=residuals_lme_2.1_int_step)) +
+    stat_qq(shape=1, size=3) + figure_theme + ylab("Sample quantiles") + xlab("Theoretical quantiles")
+ 
+AIC(depth_lme_2.1_int_step, depth_lme_2.1_int)
+
+depthmodeldf$predict_lme_2.1_int_step <- predict(depth_lme_2.1_int_step, depthmodeldf)
+speed1 <- ggplot() + geom_point(data=depthmodeldf, aes(speed, sqrtdepth), colour="red") + figure_theme
+speed2 <-ggplot() + geom_point(data=depthmodeldf, aes(speed, predict_lme_2.1_int_step), colour="blue") + figure_theme
+
+month1 <- ggplot() + geom_jitter(data=depthmodeldf, aes(month, sqrtdepth), colour="red") + figure_theme
+month2 <- ggplot() + geom_jitter(data=depthmodeldf, aes(month, predict_lme_2.1_int_step), colour="blue") + figure_theme
+
+Length1 <- ggplot() + geom_jitter(data=depthmodeldf, aes(Length, sqrtdepth), colour="red") + figure_theme
+Length2 <- ggplot() + geom_jitter(data=depthmodeldf, aes(Length, predict_lme_2.1_int_step), colour="blue") + figure_theme
+
+daynight1 <- ggplot() + geom_jitter(data=depthmodeldf, aes(daynight, sqrtdepth), colour="red") + figure_theme
+daynight2 <- ggplot() + geom_jitter(data=depthmodeldf, aes(daynight, predict_lme_2.1_int_step), colour="blue") + figure_theme
+
+grid.arrange(speed1, speed2, month1, month2, Length1, Length2, daynight1, daynight2, nrow=4, main="depth_lme_2.1_int_step")
+
+require(car)
+Anova(depth_lme_2.1_int_step)
+
+cut.fit <- cut(fitted(depth_lme_2.1_int_step), breaks = quantile(fitted(depth_lme_2.1_int_step), probs = seq(0,1, length = 20)))
+table(cut.fit)
+means1 <- tapply(fitted(depth_lme_2.1_int_step), cut.fit, mean)
+var1 <- tapply(residuals(depth_lme_2.1_int_step), cut.fit, var)
+plot(means1, var1, xlab="Fitted values", ylab="Variance of the residuals", pch = 20)
+
+acf(residuals_lme_2.1_int_step)
+require(car)
+durbinWatsonTest(fitted_lme_2.1_int_step)
+plot(residuals(depth_lme_2.1_int_step) [1:100], type="b")
+abline(h=0)
+### Histogram of residuals
+residhist <- ggplot() + geom_histogram(data=depthmodeldf, aes(residuals(depth_lme_2.1_int_step)), fill=NA, colour="black", binwidth=0.5) + figure_theme + xlab("Residuals") + ylab("Frequency") + scale_y_continuous(breaks=seq(0, 3000, 500))
+
+### Residuals vs. fitted
+resvfit <- ggplot() + geom_point(data=depthmodeldf, aes(fitted(depth_lme_2.1_int_step), residuals(depth_lme_2.1_int_step)), shape=1, size=3) + figure_theme + xlab("Fitted values") + ylab("Residuals")
+
+### QQNorm in GGPLOT2
+qqnormplot <- ggplot(depthmodeldf, aes(sample=residuals(depth_lme_2.1_int_step))) +
+    stat_qq(shape=1, size=3) + figure_theme + ylab("Sample quantiles") + xlab("Theoretical quantiles")
+
+ng = nullGrob()
+grid.arrange(arrangeGrob(residhist, resvfit, nrow=1),
+             arrangeGrob(ng, qqnormplot, ng, nrow=1, widths=c(0.5, 1, 0.5)),
+             nrow=2)
+
+###AIC(depth_lme_1, depth_lme_1.1, depth_lme_1.1_int, depth_lme_1.1_int2, depth_lme_1.1_int_step)
+
+AIC(depth_lme_2, depth_lme_2.1, depth_lme_2.1_int, depth_lme_2.1_int_step)
+
+# formula(depth_lme_1)
+# formula(depth_lme_1.1)
+# formula(depth_lme_1.1_int)
+# formula(depth_lme_1.1_int2)
+# formula(depth_lme_1.1_int_step)
+
+formula(depth_lme_2)
+formula(depth_lme_2.1)
+formula(depth_lme_2.1_int)
+formula(depth_lme_2.1_int_step)
+
+# depthmodeldf$adj.depth <- 10^(depthmodeldf$predict_lme_1.1_int_step)
+# ggplot() + geom_point(data=depthmodeldf, aes(speed, adj.depth))
+# ggplot() + geom_point(data=depthmodeldf, aes(speed, Detection.depth))
+# hist(depthmodeldf$adj.depth, ylim=c(0,4000))
+# hist(depthmodeldf$Detection.depth, ylim=c(0,4000))
+# hist(depthmodeldf$predict_lme_1.1_int_step, ylim=c(0,2500), breaks=20, xlim=c(0,3))
+# hist(depthmodeldf$logdepth, ylim=c(0,2500), breaks=20, xlim=c(0,3))
+
+# depthmodeldf$hour <- hour(depthmodeldf$Date.and.Time..UTC.)
+
+# speed3 <- ggplot() + geom_point(data=depthmodeldf, aes(speed, adj.depth), colour="red") + figure_theme + scale_y_reverse()
+# month3 <- ggplot() + geom_jitter(data=depthmodeldf, aes(as.factor(month), adj.depth), colour="red") + figure_theme + scale_y_reverse() #+ coord_polar()
+# Length3 <- ggplot() + geom_jitter(data=depthmodeldf, aes(Length, adj.depth), colour="red") + figure_theme + scale_y_reverse()
+# daynight3 <- ggplot() + geom_jitter(data=depthmodeldf, aes(daynight, adj.depth), colour="red") + figure_theme + scale_y_reverse()
+# hour3 <- ggplot() + geom_jitter(data = depthmodeldf, aes(hour, adj.depth, colour=daynight)) + figure_theme + scale_y_reverse() + xlab("Hour (UTC)") + scale_colour_manual(values=c(1, 4))
+# year3 <- ggplot() + geom_jitter(data=depthmodeldf, aes(year, adj.depth), colour="red") + figure_theme + scale_y_reverse()
+# tide3 <- ggplot() + geom_jitter(data=depthmodeldf, aes(Tide.direction, adj.depth), colour="red") + figure_theme + scale_y_reverse()
+# 
+# grid.arrange(speed3, month3, Length3, daynight3, hour3, year3, tide3, nrow=4)
+# 
+# realspeed3 <- ggplot() + geom_point(data=depthmodeldf, aes(speed, Detection.depth), colour="red") + figure_theme + scale_y_reverse()
+# realmonth3 <- ggplot() + geom_jitter(data=depthmodeldf, aes(as.factor(month), Detection.depth), colour="red") + figure_theme + scale_y_reverse() #+ coord_polar()
+# realLength3 <- ggplot() + geom_jitter(data=depthmodeldf, aes(Length, Detection.depth), colour="red") + figure_theme + scale_y_reverse()
+# realdaynight3 <- ggplot() + geom_jitter(data=depthmodeldf, aes(daynight, Detection.depth), colour="red") + figure_theme + scale_y_reverse()
+# realhour3 <- ggplot() + geom_jitter(data = depthmodeldf, aes(hour, Detection.depth, colour=daynight)) + figure_theme + scale_y_reverse() + xlab("Hour (UTC)") + scale_colour_manual(values=c(1, 4))
+# realyear3 <- ggplot() + geom_jitter(data=depthmodeldf, aes(year, Detection.depth), colour="red") + figure_theme + scale_y_reverse()
+# realtide3 <- ggplot() + geom_jitter(data=depthmodeldf, aes(Tide.direction, Detection.depth), colour="red") + figure_theme + scale_y_reverse()
+# 
+# grid.arrange(realspeed3, realmonth3, realLength3, realdaynight3, realhour3, realyear3, realtide3, nrow=4)
+```
+
+### Removing year from sqrt model (depth_lme_2.1_int_step2)
+```{r}
+### Removing year
+depth_lme_2.1_int_step2 <- update(depth_lme_2.1_int_step, .~. - year)
+```
+
+### Changing month to a factor and removing month interactions (depth_lme_1.1_int_step3)
+```{r}
+depthmodeldf$monthfac <- as.factor(depthmodeldf$month)
+depthmodeldf <- within(depthmodeldf, monthfac <- relevel(monthfac, ref = 11))
+
+depth_lme_2.1_int_step3 <- update(depth_lme_2.1_int_step2, .~. - month - daynight:month - month:Length - speed:month - watercolumn:month + monthfac)
+```
+
+### Adding in monthfac interactions (depth_lme_1.1_int_step4), and testing
+```{r}
+depth_lme_2.1_int_step4 <- update(depth_lme_2.1_int_step3, .~. + daynight:monthfac + monthfac:Length + speed:monthfac +watercolumn:monthfac)
+
+Anova(depth_lme_2.1_int_step4)
+ggplot() + geom_boxplot(data=depthmodeldf, aes(as.factor(month), fitted(depth_lme_1.1_int_step4)))
+
+summary(depth_lme_2.1_int_step4)
+anova(depth_lme_2.1_int_step4)
+```
+
+### Model selection tables from MuMIn
+```{r}
+sqrsel <- model.sel(depth_lme_2, depth_lme_2.1, depth_lme_2.1_int, depth_lme_2.1_int2, depth_lme_2.1_int_step, depth_lme_2.1_int_step2, depth_lme_2.1_int_step4, rank=AIC)
+logsel <- model.sel(depth_lme_1, depth_lme_1.1, depth_lme_1.1_int, depth_lme_1.1_int2, depth_lme_1.1_int_step, depth_lme_1.1_int_step2, depth_lme_1.1_int_step4, rank=AIC)
+sqrsel
+```
+
+```{r}
+logbasic <- dredge(depth_lme_1.1, trace=2, rank="AICc", REML=FALSE)
+logbasic <- dredge(depth_lme_1.1, trace=2, rank="AICc", REML=TRUE)
+(attr(logbasic, "rank.call"))
+logbasicList <- get.models(logbasic, 1:5)
+summary(model.avg(logbasicList))
+
+sqrbasic <- dredge(depth_lme_2.1, trace=2, rank="AIC")
+(attr(sqrbasic, "rank.call"))
+sqrbasicList <- get.models(sqrbasic, 1:5)
+summary(model.avg(sqrbasicList))
+
+summary(depth_lme_1.1)
+anova(depth_lme_1.1)
+Anova(depth_lme_1.1)
+questionsub <- subset(depthmodeldf, select=c("Date.and.Time..UTC.", "Fish.code", "Station.Name.New", "Detection.depth", "sqrtdepth", "daynight"))
+str(depthmodeldf)
+depthmodeldf <- within(depthmodeldf, monthfac <- relevel(monthfac, ref = 11))
+depth_lme_1.1_fac <- lmer(data=depthmodeldf, logdepth ~ daynight + year + watercolumn + speed + Tide.direction + monthfac + Length + (1|Fish.code) + (1|Station.Name.New))
+Anova(depth_lme_1.1_fac)
+AIC(depth_lme_1.1, depth_lme_1.1_fac)
+
+Anova(depth_lme_1.1)
+Anova(depth_lme_1.1_fac)
+
+depth_lme_1.1_fac2 <- update(depth_lme_1.1_fac, .~. - speed - Length)
+Anova(depth_lme_1.1_fac2)
+anova(depth_lme_1.1_fac, depth_lme_1.1_fac2)
+
+```
+
+### Statistical testing for daynight trend
+```{r}
+daynighttable <- subset(depthmodeldf, select=c(daynight, Detection.depth))
+daylist <- subset(daynighttable, daynight=="Day")
+nightlist <- subset(daynighttable, daynight=="Night")
+var.test(daylist$Detection.depth, nightlist$Detection.depth)
+### Variances are significantly different
+
+### Kolmogorov-Smirnov Test
+table(daynighttable$daynight)
+# Day Night 
+#  3566  5072
+dayKStest <- daynighttable$Detection.depth[daynighttable$daynight=="Day"]
+nightKStest <- daynighttable$Detection.depth[daynighttable$daynight=="Night"]
+
+t.test(dayKStest, nightKStest)
+#   Welch Two Sample t-test
+# 
+# data:  dayKStest and nightKStest
+# t = 61.643, df = 6517.618, p-value < 2.2e-16
+# alternative hypothesis: true difference in means is not equal to 0
+# 95 percent confidence interval:
+#  18.10286 19.29206
+# sample estimates:
+# mean of x mean of y 
+#  35.27049  16.57303 
+
+ks.test(dayKStest, nightKStest)
+#   Two-sample Kolmogorov-Smirnov test
+# 
+# data:  dayKStest and nightKStest
+# D = 0.6164, p-value < 2.2e-16
+# alternative hypothesis: two-sided
+
+### MEANS ARE SIGNIFICANTLY DIFFERENT
+
+var.test(dayKStest, nightKStest)
+#   F test to compare two variances
+# 
+# data:  dayKStest and nightKStest
+# F = 1.5908, num df = 3565, denom df = 5071, p-value < 2.2e-16
+# alternative hypothesis: true ratio of variances is not equal to 1
+# 95 percent confidence interval:
+#  1.497480 1.690399
+# sample estimates:
+# ratio of variances 
+#            1.59076 
+
+### VARIANCES ARE SIGNIFICANTLY DIFFERENT
+```
+
+### Statistical testing for season
+```{r}
+monthtable <- subset(depthmodeldf, select=c(month, Detection.depth))
+monthtable$season <- ifelse(monthtable$month<12 & monthtable$month>3, "Spring/Summer/Fall", "Winter")
+
+winterlist <- subset(monthtable, season=="Winter")
+summerlist <- subset(monthtable, season=="Spring/Summer/Fall")
+var.test(winterlist$Detection.depth, summerlist$Detection.depth)
+### Variances are significantly different
+
+### Kolmogorov-Smirnov Test
+table(monthtable$season)
+# Spring/Summer/Fall             Winter 
+#               3807               4831 
+winterKStest <- monthtable$Detection.depth[monthtable$season=="Winter"]
+summerKStest <- monthtable$Detection.depth[monthtable$season=="Spring/Summer/Fall"]
+
+t.test(winterKStest, summerKStest)
+#   Welch Two Sample t-test
+# 
+# data:  winterKStest and summerKStest
+# t = -17.9267, df = 4853.078, p-value < 2.2e-16
+# alternative hypothesis: true difference in means is not equal to 0
+# 95 percent confidence interval:
+#  -7.431783 -5.966548
+# sample estimates:
+# mean of x mean of y 
+#  21.33935  28.03851 
+
+ks.test(winterKStest, summerKStest)
+#   Two-sample Kolmogorov-Smirnov test
+# 
+# data:  winterKStest and summerKStest
+# D = 0.3543, p-value < 2.2e-16
+# alternative hypothesis: two-sided
+
+### MEANS ARE SIGNIFICANTLY DIFFERENT
+
+var.test(dayKStest, nightKStest)
+#   F test to compare two variances
+# 
+# data:  dayKStest and nightKStest
+# F = 1.5908, num df = 3565, denom df = 5071, p-value < 2.2e-16
+# alternative hypothesis: true ratio of variances is not equal to 1
+# 95 percent confidence interval:
+#  1.497480 1.690399
+# sample estimates:
+# ratio of variances 
+#            1.59076
+
+### VARIANCES ARE SIGNIFICANTLY DIFFERENT
+
+
+
+require(nlme)
+baseline <- lme(sqrtdepth ~ 1, random = ~1|Fish.code/daynight/Station.Name.New, data=depthmodeldf, method="ML")
+daynightModel <- lme(sqrtdepth ~ daynight, random = ~1|Fish.code/daynight/Station.Name.New, data=depthmodeldf, method="ML")
+anova(baseline, daynightModel)
+summary(daynightModel)
+require(multcomp)
+posthoc <- glht(daynightModel, linfct = mcp(daynight = "Tukey"))
+summary(posthoc)
+
+
+aov.test <- aov(sqrtdepth ~ daynight + Error(Fish.code/daynight), data=depthmodeldf)
+```
+
+
+SEASON NOT MONTH
+============================
+
+### From Modelling.Rmd, going with log transform:
+```{r}
+depthmodeldf$logdepth <- log10(depthmodeldf$Detection.depth +1)
+depth_lm_2_s <- lm(logdepth ~ daynight + year + watercolumn + speed + Tide.direction + season + Capture.location + Length, data=depthmodeldf)
+residuals_lm_2_s <- resid(depth_lm_2_s, type="response")
+fitted_lm_2_s <- fitted(depth_lm_2_s)
+op <- par(mfrow=c(3,2), mar=c(4,4,3,2))
+ylabel <- "residuals"
+plot(x=fitted_lm_2_s, y=residuals_lm_2_s, xlab="Fitted values", ylab=ylabel)
+boxplot(residuals_lm_2_s ~ daynight, data=depthmodeldf, main="Day or night", ylab=ylabel)
+boxplot(residuals_lm_2_s ~ season, data=depthmodeldf, main="Season", ylab=ylabel)
+boxplot(residuals_lm_2_s ~ Capture.location, data=depthmodeldf, main="Tagging location", ylab=ylabel)
+plot(x=depthmodeldf$speed, y=residuals_lm_2_s, ylab=ylabel, xlab="speed")
+plot(x=depthmodeldf$Length, y=residuals_lm_2_s, ylab=ylabel, xlab="length")
+### Looking better...
+```
+
+### Trying log transform with LME (depth_lme_1)
+```{r}
+depth_lme_1_s <- lmer(logdepth ~ daynight + year + watercolumn + speed + season + Capture.location + Length + (1|Fish.code) + (1|Station.Name.New), data = depthmodeldf)
+residuals_lme_1_s <- resid(depth_lme_1_s, type="response")
+fitted_lme_1_s <- fitted(depth_lme_1_s)
+op <- par(mfrow=c(4,2), mar=c(4,4,3,2))
+ylabel <- "residuals"
+plot(x=fitted_lme_1_s, y=residuals_lme_1_s, xlab="Fitted values", ylab=ylabel)
+qqnorm(residuals_lme_1_s)
+hist(residuals_lme_1_s)
+boxplot(residuals_lme_1_s ~ daynight, data=depthmodeldf, main="Day or night", ylab=ylabel)
+boxplot(residuals_lme_1_s ~ season, data=depthmodeldf, main="Season", ylab=ylabel)
+boxplot(residuals_lme_1_s ~ Capture.location, data=depthmodeldf, main="Tagging location", ylab=ylabel)
+plot(x=depthmodeldf$speed, y=residuals_lme_1_s, ylab=ylabel, xlab="speed")
+plot(x=depthmodeldf$Length, y=residuals_lme_1_s, ylab=ylabel, xlab="length")
+## Much better
+```
+
+### Trying sqrt transform with LME (depth_lme_2)
+```{r}
+depthmodeldf$sqrtdepth <- sqrt(depthmodeldf$Detection.depth)
+depth_lme_2_s <- lmer(sqrtdepth ~ daynight + year + watercolumn + speed + season + Capture.location + Length + (1|Fish.code) + (1|Station.Name.New), data = depthmodeldf)
+residuals_lme_2_s <- resid(depth_lme_2_s, type="response")
+fitted_lme_2_s <- fitted(depth_lme_2_s)
+op <- par(mfrow=c(4,2), mar=c(4,4,3,2))
+ylabel <- "residuals"
+plot(x=fitted_lme_2_s, y=residuals_lme_2_s, xlab="Fitted values", ylab=ylabel)
+qqnorm(residuals_lme_2_s)
+hist(residuals_lme_2_s)
+boxplot(residuals_lme_2_s ~ daynight, data=depthmodeldf, main="Day or night", ylab=ylabel)
+boxplot(residuals_lme_2_s ~ season, data=depthmodeldf, main="Season", ylab=ylabel)
+boxplot(residuals_lme_2_s ~ Capture.location, data=depthmodeldf, main="Tagging location", ylab=ylabel)
+plot(x=depthmodeldf$speed, y=residuals_lme_2_s, ylab=ylabel, xlab="speed")
+plot(x=depthmodeldf$Length, y=residuals_lme_2_s, ylab=ylabel, xlab="length")
+## Looks good as well. Plots for sqrt look better than log.
+```
+
+### Compare log and sqrt
+```{r}
+AIC(depth_lme_1_s, depth_lme_2_s)
+### log is better
+
+```
+
+### Trying gamma distribution with LME. From Dr. B. Bolker: Gamma distributions have a reasonably clear interpretation in a failure-time model, especially for integer shape parameters (waiting times until a certain number of events happen); log-Normal distributions are the natural outcome of a geometric random walk, so they might make sense for the outcome of growth processes (individual or population).
+```{r}
+# depth_lme_3 <- glmer(Detection.depth ~ daynight + year + watercolumn + speed + Tide.direction + month + Length + (1|Fish.code) + (1|Station.Name), data = depthmodeldf, family=Gamma(link=log))
+# Warning messages:
+# 1: In checkConv(attr(opt, "derivs"), opt$par, ctrl = control$checkConv,  :
+#   Model failed to converge with max|grad| = 0.0570429 (tol = 0.001, component 5)
+# 2: In checkConv(attr(opt, "derivs"), opt$par, ctrl = control$checkConv,  :
+#   Model is nearly unidentifiable: very large eigenvalue
+#  - Rescale variables?;Model is nearly unidentifiable: large eigenvalue ratio
+#  - Rescale variables?
+### NOT GOING TO GO FORWARD WITH GAMMA!
+```
+
+### Checking for collinearity using vif.mer function from https://hlplab.wordpress.com/2011/02/24/diagnosing-collinearity-in-lme4/ (depth_lme_1.1 and depth_lme_2.1)
+```{r}
+vif.mer <- function (fit) {
+    ## adapted from rms::vif
+
+    v <- vcov(fit)
+    nam <- names(fixef(fit))
+
+    ## exclude intercepts
+    ns <- sum(1 * (nam == "Intercept" | nam == "(Intercept)"))
+    if (ns > 0) {
+        v <- v[-(1:ns), -(1:ns), drop = FALSE]
+        nam <- nam[-(1:ns)]
+    }
+
+    d <- diag(v)^0.5
+    v <- diag(solve(v/(d %o% d)))
+    names(v) <- nam
+    v
+}
+
+vif.mer(depth_lme_1)
+
+depth_lme_1.1_s <- update(depth_lme_1_s, .~. - Capture.location)
+summary(depth_lme_1.1_s)
+residuals_lme_1.1_s <- resid(depth_lme_1.1_s, type="response")
+fitted_lme_1.1_s <- fitted(depth_lme_1.1_s)
+ylabel <- "residuals"
+plot(x=fitted_lme_1.1_s, y=residuals_lme_1.1_s, xlab="Fitted values", ylab=ylabel)
+qqnorm(residuals_lme_1.1_s)
+hist(residuals_lme_1.1_s)
+vif.mer(depth_lme_1.1_s)
+
+vif.mer(depth_lme_2_s)
+depth_lme_2.1_s <- update(depth_lme_2_s, .~. - Capture.location)
+summary(depth_lme_2.1_s)
+residuals_lme_2.1_s <- resid(depth_lme_2.1_s, type="response")
+fitted_lme_2.1_s <- fitted(depth_lme_2.1_s)
+ylabel <- "residuals"
+plot(x=fitted_lme_2.1_s, y=residuals_lme_2.1_s, xlab="Fitted values", ylab=ylabel)
+qqnorm(residuals_lme_2.1_s)
+hist(residuals_lme_2.1_s)
+vif.mer(depth_lme_2.1_s)
+
+vif.mer(depth_lme_2_s)
+depth_lme_2.2_s <- update(depth_lme_2_s, .~. - Length)
+summary(depth_lme_2.2_s)
+residuals_lme_2.2_s <- resid(depth_lme_2.2_s, type="response")
+fitted_lme_2.2_s <- fitted(depth_lme_2.2_s)
+ylabel <- "residuals"
+plot(x=fitted_lme_2.2_s, y=residuals_lme_2.2_s, xlab="Fitted values", ylab=ylabel)
+qqnorm(residuals_lme_2.2_s)
+hist(residuals_lme_2.2_s)
+vif.mer(depth_lme_2.2_s)
+
+```
+
+### Trying interaction terms with sqrt transform (depth_lme_2.1_s_int)
+```{r}
+# daynight:watercolumn + daynight:speed + daynight:Tide.direction + daynight:month + daynight:Length + month:Length + speed:month + speed:watercolumn + speed:Tide.direction + speed:Length + Length:watercolumn + watercolumn:month
+
+Anova(depth_lme_2.1_s_i)
+
+depth_lme_2.1_s_int <- update(depth_lme_2.1_s, .~. + daynight:watercolumn + daynight:speed + daynight:Tide.direction + daynight:season + daynight:Length + season:Length + speed:season + speed:watercolumn + speed:Tide.direction + speed:Length + Length:watercolumn + watercolumn:season)
+summary(depth_lme_2.1_s_int)
+residuals_lme_2.1_s_int <- resid(depth_lme_2.1_s_int, type="response")
+fitted_lme_2.1_s_int <- fitted(depth_lme_2.1_s_int)
+ylabel <- "residuals"
+plot(x=fitted_lme_2.1_s_int, y=residuals_lme_2.1_s_int, xlab="Fitted values", ylab=ylabel)
+qqnorm(residuals_lme_2.1_s_int)
+hist(residuals_lme_2.1_s_int)
+vif.mer(depth_lme_2.1_s_int)
+Anova(depth_lme_2.1_s_int)
+
+```
+
+### Taking out insignificant interaction terms (depth_lme_2.1_s_int2)
+```{r}
+depth_lme_2.1_s_int2 <- update(depth_lme_2.1_s_int, .~. - daynight:Tide.direction - season:Length)
+summary(depth_lme_2.1_s_int2)
+residuals_lme_2.1_s_int2 <- resid(depth_lme_2.1_s_int2, type="response")
+fitted_lme_2.1_s_int2 <- fitted(depth_lme_2.1_s_int2)
+ylabel <- "residuals"
+plot(x=fitted_lme_2.1_s_int2, y=residuals_lme_2.1_s_int2, xlab="Fitted values", ylab=ylabel)
+qqnorm(residuals_lme_2.1_s_int2)
+hist(residuals_lme_2.1_s_int2)
+vif.mer(depth_lme_2.1_s_int2)
+
+```
+
+### Model comparisons
+```{r}
+AIC(depth_lme_2_s,
+    depth_lme_2.1_s,
+    depth_lme_2.1_s_int,
+    depth_lme_2.1_s_int2)
+
+BIC(depth_lme_1_s,
+    depth_lme_2_s,
+    depth_lme_1.1_s,
+    depth_lme_2.1_s,
+    depth_lme_1.1_s_int,
+    depth_lme_1.1_s_int2,
+    depth_lme_2.1_s_int,
+    depth_lme_2.1_s_int2)
+```
+
+### Predicting data from depth_lme_1.1_int
+```{r}
+depthmodeldf$predict_1.1_s_int <- predict(depth_lme_1.1_s_int, depthmodeldf)
+
+speed1 <- ggplot() + geom_point(data=depthmodeldf, aes(speed, logdepth), colour="red") + figure_theme
+speed2 <- ggplot() + geom_point(data=depthmodeldf, aes(speed, predict_1.1_s_int), colour="blue") + figure_theme
+
+month1 <- ggplot() + geom_jitter(data=depthmodeldf, aes(month, logdepth), colour="red") + figure_theme
+month2 <- ggplot() + geom_jitter(data=depthmodeldf, aes(month, predict_1.1_s_int), colour="blue") + figure_theme
+
+season1 <- ggplot() + geom_jitter(data=depthmodeldf, aes(season, logdepth), colour="red") + figure_theme
+season2 <- ggplot() + geom_jitter(data=depthmodeldf, aes(season, predict_1.1_s_int), colour="blue") + figure_theme
+
+Length1 <- ggplot() + geom_jitter(data=depthmodeldf, aes(Length, logdepth), colour="red") + figure_theme
+Length2 <- ggplot() + geom_jitter(data=depthmodeldf, aes(Length, predict_1.1_s_int), colour="blue") + figure_theme
+
+daynight1 <- ggplot() + geom_jitter(data=depthmodeldf, aes(daynight, logdepth), colour="red") + figure_theme
+daynight2 <- ggplot() + geom_jitter(data=depthmodeldf, aes(daynight, predict_1.1_s_int), colour="blue") + figure_theme
+
+grid.arrange(speed1, speed2, month1, month2, season1, season2, Length1, Length2, daynight1, daynight2, nrow=5, main="depth_lme_1.1_s_int")
+```
+
+### Predicting data from depth_lme_2.1_int
+```{r}
+depthmodeldf$predict_2.1_s_int2 <- predict(depth_lme_2.1_s_int2, depthmodeldf)
+
+speed1 <- ggplot() + geom_point(data=depthmodeldf, aes(speed, sqrtdepth), colour="red") + figure_theme
+speed2 <-ggplot() + geom_point(data=depthmodeldf, aes(speed, predict_2.1_s_int2), colour="blue") + figure_theme
+
+season1 <- ggplot() + geom_jitter(data=depthmodeldf, aes(season, sqrtdepth), colour="red") + figure_theme
+season2 <- ggplot() + geom_jitter(data=depthmodeldf, aes(season, predict_2.1_s_int2), colour="blue") + figure_theme
+
+Length1 <- ggplot() + geom_jitter(data=depthmodeldf, aes(Length, sqrtdepth), colour="red") + figure_theme
+Length2 <- ggplot() + geom_jitter(data=depthmodeldf, aes(Length, predict_2.1_s_int2), colour="blue") + figure_theme
+
+daynight1 <- ggplot() + geom_jitter(data=depthmodeldf, aes(daynight, sqrtdepth), colour="red") + figure_theme
+daynight2 <- ggplot() + geom_jitter(data=depthmodeldf, aes(daynight, predict_2.1_s_int2), colour="blue") + figure_theme
+
+grid.arrange(speed1, speed2, season1, season2, Length1, Length2, daynight1, daynight2, nrow=4, main="depth_lme_2.1_int2")
+```
+
+### Significance testing depth_lme_1.1_int, creating, diagnosing, and plotting depth_lme_1.1_int_step
+```{r}
+require(car)
+Anova(depth_lme_2.1_s_int2)
+
+require(lmerTest)
+anova(depth_lme_2.1_s_int2)
+
+getOption("digits") 
+options(scipen=3)
+summary(depth_lme_2.1_s_int2)
+anova(depth_lme_2.1_s_int2)
+Anova(depth_lme_2.1_s_int2)
+
+### QQNorm in GGPLOT2
+qqnormplot <- ggplot(depthmodeldf, aes(sample=residuals_lme_2.1_s_int2)) +
+    stat_qq(shape=1, size=3) + figure_theme + ylab("Sample quantiles") + xlab("Theoretical quantiles")
+
+cut.fit <- cut(fitted(depth_lme_2.1_s_int2), breaks = quantile(fitted(depth_lme_2.1_s_int2), probs = seq(0,1, length = 20)))
+table(cut.fit)
+means1 <- tapply(fitted(depth_lme_2.1_s_int2), cut.fit, mean)
+var1 <- tapply(residuals(depth_lme_2.1_s_int2), cut.fit, var)
+plot(means1, var1, xlab="Fitted values", ylab="Variance of the residuals", pch = 20)
+
+acf(residuals_lme_2.1_s_int2)
+require(car)
+durbinWatsonTest(fitted_lme_2.1_s_int2)
+plot(residuals(depth_lme_2.1_s_int2) [1:100], type="b")
+abline(h=0)
+### Histogram of residuals
+residhist <- ggplot() + geom_histogram(data=depthmodeldf, aes(residuals(depth_lme_2.1_s_int2)), fill=NA, colour="black", binwidth=0.1) + figure_theme + xlab("Residuals") + ylab("Frequency") + scale_y_continuous(breaks=seq(0, 3000, 500))
+
+### Residuals vs. fitted
+resvfit <- ggplot() + geom_point(data=depthmodeldf, aes(fitted(depth_lme_2.1_s_int2), residuals(depth_lme_2.1_int_step)), shape=1, size=3) + figure_theme + xlab("Fitted values") + ylab("Residuals")
+
+### QQNorm in GGPLOT2
+qqnormplot <- ggplot(depthmodeldf, aes(sample=residuals_lme_2.1_s_int2)) +
+    stat_qq(shape=1, size=3) + figure_theme + ylab("Sample quantiles") + xlab("Theoretical quantiles")
+
+ng = nullGrob()
+grid.arrange(arrangeGrob(residhist, resvfit, nrow=1),
+             arrangeGrob(ng, qqnormplot, ng, nrow=1, widths=c(0.5, 1, 0.5)),
+             nrow=2)
+
+# AIC(depth_lme_1, depth_lme_1.1, depth_lme_1.1_int, depth_lme_1.1_int2, depth_lme_1.1_int_step)
+# AIC(depth_lme_2, depth_lme_2.1, depth_lme_2.1_int, depth_lme_2.1_int2)
+# 
+# formula(depth_lme_1)
+# formula(depth_lme_1.1)
+# formula(depth_lme_1.1_int)
+# formula(depth_lme_1.1_int2)
+# formula(depth_lme_1.1_int_step)
+# formula(depth_lme_2)
+# formula(depth_lme_2.1)
+# formula(depth_lme_2.1_int)
+# formula(depth_lme_2.1_int2)
+# 
+# depthmodeldf$adj.depth <- 10^(depthmodeldf$predict_lme_1.1_int_step)
+# ggplot() + geom_point(data=depthmodeldf, aes(speed, adj.depth))
+# ggplot() + geom_point(data=depthmodeldf, aes(speed, Detection.depth))
+# hist(depthmodeldf$adj.depth, ylim=c(0,4000))
+# hist(depthmodeldf$Detection.depth, ylim=c(0,4000))
+# hist(depthmodeldf$predict_lme_1.1_int_step, ylim=c(0,2500), breaks=20, xlim=c(0,3))
+# hist(depthmodeldf$logdepth, ylim=c(0,2500), breaks=20, xlim=c(0,3))
+# 
+# depthmodeldf$hour <- hour(depthmodeldf$Date.and.Time..UTC.)
+# 
+# speed3 <- ggplot() + geom_point(data=depthmodeldf, aes(speed, adj.depth), colour="red") + figure_theme + scale_y_reverse()
+# month3 <- ggplot() + geom_jitter(data=depthmodeldf, aes(as.factor(month), adj.depth), colour="red") + figure_theme + scale_y_reverse() #+ coord_polar()
+# Length3 <- ggplot() + geom_jitter(data=depthmodeldf, aes(Length, adj.depth), colour="red") + figure_theme + scale_y_reverse()
+# daynight3 <- ggplot() + geom_jitter(data=depthmodeldf, aes(daynight, adj.depth), colour="red") + figure_theme + scale_y_reverse()
+# hour3 <- ggplot() + geom_jitter(data = depthmodeldf, aes(hour, adj.depth, colour=daynight)) + figure_theme + scale_y_reverse() + xlab("Hour (UTC)") + scale_colour_manual(values=c(1, 4))
+# year3 <- ggplot() + geom_jitter(data=depthmodeldf, aes(year, adj.depth), colour="red") + figure_theme + scale_y_reverse()
+# tide3 <- ggplot() + geom_jitter(data=depthmodeldf, aes(Tide.direction, adj.depth), colour="red") + figure_theme + scale_y_reverse()
+# 
+# grid.arrange(speed3, month3, Length3, daynight3, hour3, year3, tide3, nrow=4)
+# 
+# realspeed3 <- ggplot() + geom_point(data=depthmodeldf, aes(speed, Detection.depth), colour="red") + figure_theme + scale_y_reverse()
+# realmonth3 <- ggplot() + geom_jitter(data=depthmodeldf, aes(as.factor(month), Detection.depth), colour="red") + figure_theme + scale_y_reverse() #+ coord_polar()
+# realLength3 <- ggplot() + geom_jitter(data=depthmodeldf, aes(Length, Detection.depth), colour="red") + figure_theme + scale_y_reverse()
+# realdaynight3 <- ggplot() + geom_jitter(data=depthmodeldf, aes(daynight, Detection.depth), colour="red") + figure_theme + scale_y_reverse()
+# realhour3 <- ggplot() + geom_jitter(data = depthmodeldf, aes(hour, Detection.depth, colour=daynight)) + figure_theme + scale_y_reverse() + xlab("Hour (UTC)") + scale_colour_manual(values=c(1, 4))
+# realyear3 <- ggplot() + geom_jitter(data=depthmodeldf, aes(year, Detection.depth), colour="red") + figure_theme + scale_y_reverse()
+# realtide3 <- ggplot() + geom_jitter(data=depthmodeldf, aes(Tide.direction, Detection.depth), colour="red") + figure_theme + scale_y_reverse()
+# 
+# grid.arrange(realspeed3, realmonth3, realLength3, realdaynight3, realhour3, realyear3, realtide3, nrow=4)
+```
+
+### Removing year (depth_lme_1.1_int_step2)
+```{r}
+### Removing year
+depth_lme_2.1_s_int2_step2 <- update(depth_lme_2.1_s_int2, .~. - year)
+```
+
+### Comparing the different step models
+```{r}
+################ step2 ####################
+residhist1 <- ggplot() + geom_histogram(data=depthmodeldf, aes(residuals(depth_lme_2.1_s_int2)), fill=NA, colour="black", binwidth=0.1) + figure_theme + xlab("Residuals") + ylab("Frequency") + scale_y_continuous(breaks=seq(0, 3000, 500)) + ggtitle("1.1_s_int2")
+
+### Residuals vs. fitted
+resvfit1 <- ggplot() + geom_point(data=depthmodeldf, aes(fitted(depth_lme_2.1_s_int2), residuals(depth_lme_2.1_s_int2)), shape=1, size=3) + figure_theme + xlab("Fitted values") + ylab("Residuals")
+
+### QQNorm in GGPLOT2
+qqnormplot1 <- ggplot(depthmodeldf, aes(sample=residuals(depth_lme_2.1_s_int2))) +
+    stat_qq(shape=1, size=3) + figure_theme + ylab("Sample quantiles") + xlab("Theoretical quantiles")
+
+######### step2 ##################
+residhist2 <- ggplot() + geom_histogram(data=depthmodeldf, aes(residuals(depth_lme_2.1_s_int2_step2)), fill=NA, colour="black", binwidth=0.1) + figure_theme + xlab("Residuals") + ylab("Frequency") + scale_y_continuous(breaks=seq(0, 3000, 500)) + ggtitle("1.1_s_int2_step2")
+
+### Residuals vs. fitted
+resvfit2 <- ggplot() + geom_point(data=depthmodeldf, aes(fitted(depth_lme_2.1_s_int2_step2), residuals(depth_lme_2.1_s_int2_step2)), shape=1, size=3) + figure_theme + xlab("Fitted values") + ylab("Residuals")
+
+### QQNorm in GGPLOT2
+qqnormplot2 <- ggplot(depthmodeldf, aes(sample=residuals(depth_lme_2.1_s_int2_step2))) +
+    stat_qq(shape=1, size=3) + figure_theme + ylab("Sample quantiles") + xlab("Theoretical quantiles")
+
+grid.arrange(residhist1, residhist2, resvfit1, resvfit2, qqnormplot1, qqnormplot2, nrow=3)
+
+AIC(depth_lme_2.1_s_int2, depth_lme_2.1_s_int2_step2)
+```
+
+### Trying out some statistical tests
+```{r}
+summary(aov(Detection.depth ~ daynight, data=depthmodeldf))
+summary.lm(aov(Detection.depth ~ daynight, data=depthmodeldf))
+plot(as.factor(depthmodeldf$daynight), depthmodeldf$Detection.depth, notch=T)
+ggplot() + geom_bar(data = test, aes((daynight, mean), stat="identity", fill=NA, colour="blue") + 
+  geom_errorbar(data = test, aes(daynight, ymin=mean-(sd/count), ymax=mean+(sd/count)))
+test <- ddply(.data=depthmodeldf,
+              .(daynight), 
+              summarize,
+              mean = mean(Detection.depth),
+              sd = sd(Detection.depth),
+              count = length(Detection.depth))
+
+summary(aov(depth_lme_1.1_int_step))
+anova(depth_lme_1.1_int_step4)
+test.aov <- aov(logdepth ~ daynight + Error(Fish.code/daynight), depthmodeldf)  
+summary(test.aov)
+require(car)
+?linearHypothesis
+class(depth_lme_1.1_int_step4)
+
+require(lattice)
+qqmath(ranef(depth_lme_1.1_int_step4))$Fish.code
+qqmath(ranef(depth_lme_1.1_int_step4))$Station.Name.New
+summary(depth_lme_1.1_int_step4)
+```
+
+### Try out MuMIn package functions
+```{r}
+require(MuMIn)
+options(na.action=na.fail)
+
+# # From MuMIn CRAN PDF
+# # Model selection: ranking by AICc using ML
+#     ms2 <- dredge(depth_lme_1, trace = 2, rank = "AIC", REML = FALSE)
+#     (attr(ms2, "rank.call"))
+#     # Get the models (fitted by REML, as in the global model)
+#     fmList <- get.models(ms2, 1:4)
+#     # Because the models originate from 􏰀dredge(..., rank = AICc, REML = FALSE)􏰀,
+#     # the default weights in 􏰀model.avg􏰀 are ML based:
+#     summary(model.avg(fmList))
+#  par(mar = c(3,5,6,4))
+#     plot(ms2, labAsExpr = TRUE)
+# model.avg(ms2, subset = delta < 4)
+# model.avg(ms2, subset = cumsum(weight) <= .95) # get averaged coefficients
+# summary(get.models(ms2, 1)[[1]])
+# importance(ms2)
+# coefTable(ms2, 1:4)
+### model.sel(fmList) ### GOOD
+
+names(depthmodeldf)
+sqrtsel <- model.sel(depth_lme_2_s, depth_lme_2.1_s, depth_lme_2.2_s, depth_lme_2.1_s_int, depth_lme_2.1_s_int2, depth_lme_2.1_s_int2_step2, rank=AIC)
+
+sqrtsel <- model.sel(depth_lme_2_s, depth_lme_2.1_s, depth_lme_2.2_s, rank=AIC)
+
+
+```
+
+### Significance testing best model (depth_lme_2.1_s_int2), creating, diagnosing, and plotting
+```{r}
+require(car)
+Anova(depth_lme_2.1_s_int2)
+
+require(lmerTest)
+anova(depth_lme_2.1_s_int2)
+
+cut.fit <- cut(fitted(depth_lme_2.1_s_int2), breaks = quantile(fitted(depth_lme_2.1_s_int2), probs = seq(0,1, length = 20)))
+table(cut.fit)
+means1 <- tapply(fitted(depth_lme_2.1_s_int2), cut.fit, mean)
+var1 <- tapply(residuals(depth_lme_2.1_s_int2), cut.fit, var)
+plot(means1, var1, xlab="Fitted values", ylab="Variance of the residuals", pch = 20)
+
+acf(residuals_lme_2.1_s_int2)
+require(car)
+durbinWatsonTest(fitted_lme_2.1_s_int2)
+plot(residuals(depth_lme_2.1_s_int2) [1:100], type="b")
+abline(h=0)
+### Histogram of residuals
+residhist <- ggplot() + geom_histogram(data=depthmodeldf, aes(residuals(depth_lme_2.1_s_int2)), fill=NA, colour="black", binwidth=0.5) + figure_theme + xlab("Residuals") + ylab("Frequency") + scale_y_continuous(breaks=seq(0, 3000, 500))
+
+### Residuals vs. fitted
+resvfit <- ggplot() + geom_point(data=depthmodeldf, aes(fitted(depth_lme_2.1_s_int2), residuals(depth_lme_2.1_s_int2)), shape=1, size=3) + figure_theme + xlab("Fitted values") + ylab("Residuals")
+
+### QQNorm in GGPLOT2
+qqnormplot <- ggplot(depthmodeldf, aes(sample=residuals(depth_lme_2.1_s_int2))) +
+    stat_qq(shape=1, size=3) + figure_theme + ylab("Sample quantiles") + xlab("Theoretical quantiles")
+
+ng = nullGrob()
+grid.arrange(arrangeGrob(residhist, resvfit, nrow=1),
+             arrangeGrob(ng, qqnormplot, ng, nrow=1, widths=c(0.5, 1, 0.5)),
+             nrow=2)
+
+# AIC(depth_lme_1, depth_lme_1.1, depth_lme_1.1_int, depth_lme_1.1_int2, depth_lme_1.1_int_step)
+# AIC(depth_lme_2, depth_lme_2.1, depth_lme_2.1_int, depth_lme_2.1_int2, depth_lme_2.1_int_step)
+# 
+# formula(depth_lme_1)
+# formula(depth_lme_1.1)
+# formula(depth_lme_1.1_int)
+# formula(depth_lme_1.1_int2)
+# formula(depth_lme_1.1_int_step)
+# formula(depth_lme_2)
+# formula(depth_lme_2.1)
+# formula(depth_lme_2.1_int)
+# formula(depth_lme_2.1_int2)
+# 
+# depthmodeldf$adj.depth <- 10^(depthmodeldf$predict_lme_1.1_int_step)
+# ggplot() + geom_point(data=depthmodeldf, aes(speed, adj.depth))
+# ggplot() + geom_point(data=depthmodeldf, aes(speed, Detection.depth))
+# hist(depthmodeldf$adj.depth, ylim=c(0,4000))
+# hist(depthmodeldf$Detection.depth, ylim=c(0,4000))
+# hist(depthmodeldf$predict_lme_1.1_int_step, ylim=c(0,2500), breaks=20, xlim=c(0,3))
+# hist(depthmodeldf$logdepth, ylim=c(0,2500), breaks=20, xlim=c(0,3))
+# 
+# depthmodeldf$hour <- hour(depthmodeldf$Date.and.Time..UTC.)
+# 
+# speed3 <- ggplot() + geom_point(data=depthmodeldf, aes(speed, adj.depth), colour="red") + figure_theme + scale_y_reverse()
+# month3 <- ggplot() + geom_jitter(data=depthmodeldf, aes(as.factor(month), adj.depth), colour="red") + figure_theme + scale_y_reverse() #+ coord_polar()
+# Length3 <- ggplot() + geom_jitter(data=depthmodeldf, aes(Length, adj.depth), colour="red") + figure_theme + scale_y_reverse()
+# daynight3 <- ggplot() + geom_jitter(data=depthmodeldf, aes(daynight, adj.depth), colour="red") + figure_theme + scale_y_reverse()
+# hour3 <- ggplot() + geom_jitter(data = depthmodeldf, aes(hour, adj.depth, colour=daynight)) + figure_theme + scale_y_reverse() + xlab("Hour (UTC)") + scale_colour_manual(values=c(1, 4))
+# year3 <- ggplot() + geom_jitter(data=depthmodeldf, aes(year, adj.depth), colour="red") + figure_theme + scale_y_reverse()
+# tide3 <- ggplot() + geom_jitter(data=depthmodeldf, aes(Tide.direction, adj.depth), colour="red") + figure_theme + scale_y_reverse()
+# 
+# grid.arrange(speed3, month3, Length3, daynight3, hour3, year3, tide3, nrow=4)
+# 
+# realspeed3 <- ggplot() + geom_point(data=depthmodeldf, aes(speed, Detection.depth), colour="red") + figure_theme + scale_y_reverse()
+# realmonth3 <- ggplot() + geom_jitter(data=depthmodeldf, aes(as.factor(month), Detection.depth), colour="red") + figure_theme + scale_y_reverse() #+ coord_polar()
+# realLength3 <- ggplot() + geom_jitter(data=depthmodeldf, aes(Length, Detection.depth), colour="red") + figure_theme + scale_y_reverse()
+# realdaynight3 <- ggplot() + geom_jitter(data=depthmodeldf, aes(daynight, Detection.depth), colour="red") + figure_theme + scale_y_reverse()
+# realhour3 <- ggplot() + geom_jitter(data = depthmodeldf, aes(hour, Detection.depth, colour=daynight)) + figure_theme + scale_y_reverse() + xlab("Hour (UTC)") + scale_colour_manual(values=c(1, 4))
+# realyear3 <- ggplot() + geom_jitter(data=depthmodeldf, aes(year, Detection.depth), colour="red") + figure_theme + scale_y_reverse()
+# realtide3 <- ggplot() + geom_jitter(data=depthmodeldf, aes(Tide.direction, Detection.depth), colour="red") + figure_theme + scale_y_reverse()
+# 
+# grid.arrange(realspeed3, realmonth3, realLength3, realdaynight3, realhour3, realyear3, realtide3, nrow=4)
+```
+
+### Removing year from sqrt model (depth_lme_2.1_int_step2)
+```{r}
+### Removing year
+depth_lme_2.1_s_int2_step2 <- update(depth_lme_2.1_s_int2, .~. - year)
+```
+
+### Model selection tables from MuMIn
+```{r}
+require(MuMIn)
+sqrsel <- model.sel(depth_lme_2_s, depth_lme_2.1_s, depth_lme_2.1_s_int, depth_lme_2.1_s_int2, depth_lme_2.1_s_int2_step2, rank=AIC)
+logsel <- model.sel(depth_lme_1_s, depth_lme_1.1_s, depth_lme_1.1_s_int, depth_lme_1.1_s_int2, depth_lme_1.1_s_int2_step2, rank=AIC)
+sqrsel
+logsel
+```
+
+### Playing with MuMIn
+```{r}
+# logbasic <- dredge(depth_lme_1.1, trace=2, rank="AICc", REML=FALSE)
+# logbasic <- dredge(depth_lme_1.1, trace=2, rank="AICc", REML=TRUE)
+# (attr(logbasic, "rank.call"))
+# logbasicList <- get.models(logbasic, 1:5)
+# summary(model.avg(logbasicList))
+# 
+# sqrbasic <- dredge(depth_lme_2.1, trace=2, rank="AIC")
+# (attr(sqrbasic, "rank.call"))
+# sqrbasicList <- get.models(sqrbasic, 1:5)
+# summary(model.avg(sqrbasicList))
+# 
+# summary(depth_lme_1.1)
+# anova(depth_lme_1.1)
+# Anova(depth_lme_1.1)
+# questionsub <- subset(depthmodeldf, select=c("Date.and.Time..UTC.", "Fish.code", "Station.Name.New", "Detection.depth", "sqrtdepth", "daynight"))
+# str(depthmodeldf)
+# depthmodeldf <- within(depthmodeldf, monthfac <- relevel(monthfac, ref = 11))
+# depth_lme_1.1_fac <- lmer(data=depthmodeldf, logdepth ~ daynight + year + watercolumn + speed + Tide.direction + monthfac + Length + (1|Fish.code) + (1|Station.Name.New))
+# Anova(depth_lme_1.1_fac)
+# AIC(depth_lme_1.1, depth_lme_1.1_fac)
+# 
+# Anova(depth_lme_1.1)
+# Anova(depth_lme_1.1_fac)
+# 
+# depth_lme_1.1_fac2 <- update(depth_lme_1.1_fac, .~. - speed - Length)
+# Anova(depth_lme_1.1_fac2)
+# anova(depth_lme_1.1_fac, depth_lme_1.1_fac2)
+
+```
+
+### Statistical testing for daynight trend
+```{r}
+# daynighttable <- subset(depthmodeldf, select=c(daynight, Detection.depth))
+# daylist <- subset(daynighttable, daynight=="Day")
+# nightlist <- subset(daynighttable, daynight=="Night")
+# var.test(daylist$Detection.depth, nightlist$Detection.depth)
+# ### Variances are significantly different
+# 
+# ### Kolmogorov-Smirnov Test
+# table(daynighttable$daynight)
+# # Day Night 
+# #  3566  5072
+# dayKStest <- daynighttable$Detection.depth[daynighttable$daynight=="Day"]
+# nightKStest <- daynighttable$Detection.depth[daynighttable$daynight=="Night"]
+# 
+# t.test(dayKStest, nightKStest)
+# #   Welch Two Sample t-test
+# # 
+# # data:  dayKStest and nightKStest
+# # t = 61.643, df = 6517.618, p-value < 2.2e-16
+# # alternative hypothesis: true difference in means is not equal to 0
+# # 95 percent confidence interval:
+# #  18.10286 19.29206
+# # sample estimates:
+# # mean of x mean of y 
+# #  35.27049  16.57303 
+# 
+# ks.test(dayKStest, nightKStest)
+# #   Two-sample Kolmogorov-Smirnov test
+# # 
+# # data:  dayKStest and nightKStest
+# # D = 0.6164, p-value < 2.2e-16
+# # alternative hypothesis: two-sided
+# 
+# ### MEANS ARE SIGNIFICANTLY DIFFERENT
+# 
+# var.test(dayKStest, nightKStest)
+# #   F test to compare two variances
+# # 
+# # data:  dayKStest and nightKStest
+# # F = 1.5908, num df = 3565, denom df = 5071, p-value < 2.2e-16
+# # alternative hypothesis: true ratio of variances is not equal to 1
+# # 95 percent confidence interval:
+# #  1.497480 1.690399
+# # sample estimates:
+# # ratio of variances 
+# #            1.59076 
+# 
+# ### VARIANCES ARE SIGNIFICANTLY DIFFERENT
+```
+
+### Statistical testing for season
+```{r}
+# monthtable <- subset(depthmodeldf, select=c(month, Detection.depth))
+# monthtable$season <- ifelse(monthtable$month<12 & monthtable$month>3, "Spring/Summer/Fall", "Winter")
+# 
+# winterlist <- subset(monthtable, season=="Winter")
+# summerlist <- subset(monthtable, season=="Spring/Summer/Fall")
+# var.test(winterlist$Detection.depth, summerlist$Detection.depth)
+# ### Variances are significantly different
+# 
+# ### Kolmogorov-Smirnov Test
+# table(monthtable$season)
+# # Spring/Summer/Fall             Winter 
+# #               3807               4831 
+# winterKStest <- monthtable$Detection.depth[monthtable$season=="Winter"]
+# summerKStest <- monthtable$Detection.depth[monthtable$season=="Spring/Summer/Fall"]
+# 
+# t.test(winterKStest, summerKStest)
+# #   Welch Two Sample t-test
+# # 
+# # data:  winterKStest and summerKStest
+# # t = -17.9267, df = 4853.078, p-value < 2.2e-16
+# # alternative hypothesis: true difference in means is not equal to 0
+# # 95 percent confidence interval:
+# #  -7.431783 -5.966548
+# # sample estimates:
+# # mean of x mean of y 
+# #  21.33935  28.03851 
+# 
+# ks.test(winterKStest, summerKStest)
+# #   Two-sample Kolmogorov-Smirnov test
+# # 
+# # data:  winterKStest and summerKStest
+# # D = 0.3543, p-value < 2.2e-16
+# # alternative hypothesis: two-sided
+# 
+# ### MEANS ARE SIGNIFICANTLY DIFFERENT
+# 
+# var.test(dayKStest, nightKStest)
+# #   F test to compare two variances
+# # 
+# # data:  dayKStest and nightKStest
+# # F = 1.5908, num df = 3565, denom df = 5071, p-value < 2.2e-16
+# # alternative hypothesis: true ratio of variances is not equal to 1
+# # 95 percent confidence interval:
+# #  1.497480 1.690399
+# # sample estimates:
+# # ratio of variances 
+# #            1.59076
+# 
+# ### VARIANCES ARE SIGNIFICANTLY DIFFERENT
+
+
+
+require(nlme)
+baseline <- lme(sqrtdepth ~ 1, random = ~1|Fish.code/daynight/Station.Name.New, data=depthmodeldf, method="ML")
+daynightModel <- lme(sqrtdepth ~ daynight, random = ~1|Fish.code/daynight/Station.Name.New, data=depthmodeldf, method="ML")
+anova(baseline, daynightModel)
+summary(daynightModel)
+require(multcomp)
+posthoc <- glht(daynightModel, linfct = mcp(daynight = "Tukey"))
+summary(posthoc)
+
+
+aov.test <- aov(sqrtdepth ~ daynight + Error(Fish.code/daynight), data=depthmodeldf)
+```
+
+### Trying GLM based on Monique MacKenzie's advice >>> Errors... not doing this. 
+```
+?glmer
+
+depth_glmm_1.1_s_int2_step2 <- glmer(data=depthmodeldf, Detection.depth ~ daynight + watercolumn + speed + Tide.direction + 
+    season + (1 | Fish.code) + (1 | Station.Name.New) + daynight:watercolumn + 
+    daynight:speed + daynight:season + daynight:Length + watercolumn:speed + 
+    speed:Tide.direction + watercolumn:season, family=gaussian(link="log"))
+
+predict_glmm_1 <- predict(depth_glmm_1, depthmodeldf)
+depthmodeldf$predict_glmm_1 <- predict_glmm_1
+
+rsqgen <- function(data, model, reps){
+out <- vector(length=reps)
+for(i in 1:reps){
+data$presbin <- rnorm(n=nrow(data), fitted(model))
+fakefit <- update(model, presbin~., data=data)
+out[i] <- (1-exp((fakefit$dev - fakefit$null)/nrow(data))) / (1-exp(-fakefit$null) / nrow(data))
+}
+return(out)
+}
+rsqdist <- rsqgen(data=depthmodeldf, model=depth_glmm_1, rep=100)
+
+
+
+ggplot() + geom_jitter(data=depthmodeldf, aes(daynight, Detection.depth), colour="red")
+ggplot() + geom_jitter(data=depthmodeldf, aes(daynight, predict_glmm_1), colour="blue")
+ggplot() + geom_boxplot(data=depthmodeldf, aes(daynight, predict_glmm_1))
+
+predict_glmm_2 <- predict(depth_glmm_2, depthmodeldf)
+depthmodeldf$predict_glmm_2 <- predict_glmm_2
+
+ggplot() + geom_boxplot(data=depthmodeldf, aes(daynight, Detection.depth)) + stat_boxplot(data=depthmodeldf, aes(daynight, Detection.depth), geom="errorbar")
+ggplot() + stat_boxplot(data=depthmodeldf, aes(daynight, predict_glmm_2), geom="errorbar")+ geom_boxplot(data=depthmodeldf, aes(daynight, predict_glmm_2))
+
+
+==========================
+###### Best model is depth_lme_2.1_s_int2!! #######
+
+
+##### May 8, after meeting with Rod. Removed many interactions that were not biologically important, and checked covariance of Length and Capture location.
+
+depth_lme_2_s_inttest <- update(depth_lme_2_s, .~. + daynight:season + daynight:Length + daynight:Capture.location + season:Length + season:Capture.location)
+depth_lme_2_s_inttest_Length <- update(depth_lme_2_s_inttest, .~. -Capture.location - daynight:Capture.location - season:Capture.location)
+depth_lme_2_s_inttest_Capture <- update(depth_lme_2_s_inttest, .~. -Length - daynight:Length - season:Length)
+AIC(depth_lme_2_s_inttest, depth_lme_2_s_inttest_Length, depth_lme_2_s_inttest_Capture)
+Anova(depth_lme_2_s_inttest_Length)
+depth_lme_2_s_inttest_Length_2 <- update(depth_lme_2_s_inttest_Length, .~. -season:Length)
+Anova(depth_lme_2_s_inttest_Length_2)
+
+Anova(depth_lme_2_s_inttest_Capture)
+depth_lme_2_s_inttest_Capture_2 <- update(depth_lme_2_s_inttest_Capture, .~. - season:Capture.location)
+Anova(depth_lme_2_s_inttest_Capture_2)
+
+AIC(depth_lme_2_s_inttest_Length_2, depth_lme_2_s_inttest_Capture_2)
+
+depth_lme_2_s_inttest_Length_2_noyear <- update(depth_lme_2_s_inttest_Length_2, .~. - year)
+
+AIC(depth_lme_2_s_inttest_Length, depth_lme_2_s_inttest_Length_2, depth_lme_2_s_inttest_Length_2_noyear)
+
+modelselection <- model.sel(depth_lme_2_s, depth_lme_2.1_s, depth_lme_2.2_s, depth_lme_2_s_inttest_Length, depth_lme_2_s_inttest_Length_2, depth_lme_2_s_inttest_Length_2_noyear)
+
+modelselectiontable_predictive <- as.data.frame(modelselection)
+
+Anova(depth_lme_2_s_inttest_Length_2)
+Anova(depth_lme_2_s_inttest_Length)
+summary(depth_lme_2_s_inttest_Length_2)
+
+depthmodeldf$predict_lme_may11 <- predict(depth_lme_2_s_inttest_Length, depthmodeldf)
+?predict
+diel <- ggplot() + geom_boxplot(data=depthmodeldf, aes(daynight, predict_lme_may11)) + figure_theme + ylab("Detection depth\n(sqrt m)")
+year <- ggplot() + geom_boxplot(data=depthmodeldf, aes(year, predict_lme_may11)) + figure_theme + theme(axis.title.y = element_blank())
+wcdepth <- ggplot() + geom_point(data=depthmodeldf, aes(watercolumn, predict_lme_may11)) + figure_theme + theme(axis.title.y = element_blank())
+currentspeed <- ggplot() + geom_point(data=depthmodeldf, aes(speed, predict_lme_may11)) + figure_theme + theme(axis.title.y = element_blank())
+seasonal <- ggplot() + geom_boxplot(data=depthmodeldf, aes(season, predict_lme_may11)) + figure_theme + theme(axis.title.y = element_blank())
+fishlength <- ggplot() + geom_point(data=depthmodeldf, aes(Length, predict_lme_may11)) + figure_theme +theme(axis.title.y = element_blank())
+grid.arrange(diel, year, wcdepth, currentspeed, seasonal, fishlength, nrow=2)
+
+importance(modelselection)
+r.squaredGLMM(depth_lme_2_s) 
+r.squaredGLMM(depth_lme_2.1_s)
+r.squaredGLMM(depth_lme_2.2_s)
+r.squaredGLMM(depth_lme_2_s_inttest_Length)
+r.squaredGLMM(depth_lme_2_s_inttest_Length_2) 
+r.squaredGLMM(depth_lme_2_s_inttest_Length_2_noyear)
+
+### https://sites.google.com/site/rforfishandwildlifegrads/home//mumin_usage_examples
+
+### Histogram of residuals
+residhist <- ggplot() + geom_histogram(data=depthmodeldf, aes(residuals(depth_lme_2_s_inttest_Length)), fill=NA, colour="black", binwidth=0.1) + figure_theme + xlab("Residuals") + ylab("Frequency") + scale_y_continuous(breaks=seq(0, 3000, 500)) + theme_bw(base_size=12)
+
+### Residuals vs. fitted
+resvfit <- ggplot() + geom_point(data=depthmodeldf, aes(fitted(depth_lme_2_s_inttest_Length), residuals(depth_lme_2_s_inttest_Length_2)), shape=1, size=3) + figure_theme + xlab("Fitted values") + ylab("Residuals") + theme_bw(base_size=12)
+
+### QQNorm in GGPLOT2
+qqnormplot <- ggplot(depthmodeldf, aes(sample=residuals(depth_lme_2_s_inttest_Length))) +
+    stat_qq(shape=1, size=3) + figure_theme + ylab("Sample quantiles") + xlab("Theoretical quantiles") + theme_bw(base_size=12)
+
+###PDF 10x7 inches
+ng = nullGrob()
+grid.arrange(arrangeGrob(residhist, resvfit, nrow=1),
+             arrangeGrob(ng, qqnormplot, ng, nrow=1, widths=c(0.5, 1, 0.5)),
+             nrow=2, main="Depth distribution model 4")
+             
+### May 21 additions (after talking to Jamie)
+
+## Derive confidence intervals for coefficients to see how much each variable impacts depth prediction. (SE x 1.96 +/- Estimate)^2. Do this for random effects as well.
+## Also do base variable dredge so that diel and season are obvious winners
+## Do tests to demonstrate that square root transform is better than log transform. Test residual normality.
+## Check out Gibson and Myers alewife paper and Gibson paper on fish diversion devices at Annapolis
+
+options(na.action=na.fail)
+basevar <- dredge(depth_lme_2_s)
+modelselectiontable_base <- model.sel(basevar[1:10,])
+
+
+coefs <- summary(depth_lme_2_s_inttest_Length)$coefficients
+coeftable <- as.data.frame(coefs)
+
+coeftable$adj.coef <- round(((coeftable$Estimate)^2),3)
+coeftable$direction <- ifelse(coeftable$Estimate < 0, "-", "")
+coeftable$dir.adj.coef <- as.numeric(paste0(coeftable$direction, coeftable$adj.coef))
+coeftable$variable <- row.names(coeftable)
+names(coeftable) <- c("Estimate", "Std.Error", "t.value", "adj.coef","direction", "dir.adj.coef", "variable")
+coeftable$newse <- coeftable$Std.Error * 0.5 * coeftable$Estimate
+coeftable$newlowCI <- coeftable$dir.adj.coef - (1.96*coeftable$newse)
+coeftable$newupCI <- coeftable$dir.adj.coef + (1.96*coeftable$newse)
+conf.ints.fixed <- coeftable[2:11,]
+
+conf.ints.fixed$variable <- factor(conf.ints.fixed$variable, levels = c("daynightNight", "seasonWinter", "year2012", "year2013", "watercolumn", "speed", "Length", "daynightNight:seasonWinter", "daynightNight:Length", "seasonWinter:Length"))
+conf.ints.fixed$variable <- factor(conf.ints.fixed$variable, levels=rev(levels(conf.ints.fixed$variable)))
+levels(conf.ints.fixed$variable) <- c("Season:Length", "Diel:Length", "Diel:Season", "*Fish length", "*Current speed",  "*Water column depth", "Year (2013)", "Year (2012)", "Season", "Diel (Night)")
+
+ggplot()  +
+geom_point(data=conf.ints.fixed, aes(variable, dir.adj.coef), size=2) + 
+annotate("rect", xmin=0, xmax=3.5, ymin=-Inf, ymax=Inf, alpha=0.3, fill="darkgrey")+
+            figure_theme + 
+            geom_hline(y=0, lty="dashed") + 
+            geom_errorbar(data=conf.ints.fixed, aes(x=variable, ymax = newupCI, ymin=newlowCI), width=0.5) +
+            geom_errorbar(data=conf.ints.fixed, aes(x=variable, ymax=(conf.ints.fixed$dir.adj.coef + conf.ints.fixed$newse), ymin=(conf.ints.fixed$dir.adj.coef - conf.ints.fixed$newse), width=0.25)) +
+            xlab("Model parameter\n") + 
+            ylab("\nCoefficient estimate (m)") + 
+            coord_flip()
+
+### Testing on spring/summer/fall data only
+ssfdata <- subset(depthmodeldf, season=="Spring/Summer/Fall")
+predictions <- predict(depth_lme_2_s_inttest_Length_2_noseason, newdata = ssfdata)
+predictions2 <- predict(depth_lme_2_s_inttest_Length_2, depthmodeldf)
+
+depth_lme_2_s_inttest_Length_2_noseason <- update(depth_lme_2_s_inttest_Length_2, .~. - season - daynight:season - Tide.direction:season)
+
+ggplot() + geom_jitter(data=ssfdata, aes(year, predictions))
+ggplot() + geom_jitter(data=depthmodeldf, aes(year, predictions2))
+
+
+### Try Station as a fixed effect instead of random
+
+depth_lme_2_s_inttest_Length_2_stationfixed <- update(depth_lme_2_s_inttest_Length_2, .~. - (1|Station.Name.New) + Station.Name.New)
+names(summary(depth_lme_2_s_inttest_Length_2_stationfixed))
+
+coefs_stationin <- summary(depth_lme_2_s_inttest_Length_2_stationfixed)$coefficients
+coeftable_stationin <- as.data.frame(coefs_stationin)
+
+coeftable_stationin$adj.coef <- round(((coeftable_stationin$Estimate)^2),3)
+coeftable_stationin$direction <- ifelse(coeftable_stationin$Estimate < 0, "-", "")
+coeftable_stationin$dir.adj.coef <- as.numeric(paste0(coeftable_stationin$direction, coeftable_stationin$adj.coef))
+coeftable_stationin$variable <- row.names(coeftable_stationin)
+names(coeftable_stationin) <- c("Estimate", "Std.Error", "t.value", "adj.coef", "direction", "dir.adj.coef", "variable")
+coeftable_stationin$newse <- coeftable_stationin$Std.Error * 0.5 * coeftable_stationin$Estimate
+coeftable_stationin$newlowCI <- coeftable_stationin$dir.adj.coef - (1.96*coeftable_stationin$newse)
+coeftable_stationin$newupCI <- coeftable_stationin$dir.adj.coef + (1.96*coeftable_stationin$newse)
+
+#coeftable_stationin$variable <- factor(coeftable_stationin$variable, levels = c("daynightNight", "seasonWinter", "year2012", "year2013", "watercolumn", "speed", "Length", "Tide.directionFlood", "Tide.directionFlood:seasonWinter", "daynightNight:Tide.directionFlood", "daynightNight:seasonWinter", "daynightNight:Length"))
+#conf.ints.fixed$variable <- factor(conf.ints.fixed$variable, levels=rev(levels(conf.ints.fixed$variable)))
+#levels(conf.ints.fixed$variable) <- c("Diel:Length", "Diel:Season", "Diel:Tide direction", "Season:Tide direction", "Tide direction", "Fish length", "Current speed", "Water column depth", "Year (2013)",  "Year (2012)", "Season", "Diel")
+
+ggplot() + geom_point(data=coeftable_stationin, aes(variable, dir.adj.coef), size=2) + 
+            figure_theme + 
+            geom_hline(y=0, lty="dashed") + 
+            geom_errorbar(data=coeftable_stationin, aes(x=variable, ymax = newupCI, ymin=newlowCI)) +
+            geom_errorbar(data=coeftable_stationin, aes(x=variable, ymax=(dir.adj.coef + newse), ymin=(dir.adj.coef - newse), width=0.25)) +
+            xlab("Model parameter") + 
+            ylab("Coefficient estimate") + 
+            coord_flip()
+            
+prof <- profile(depth_lme_2_s_inttest_Length_2)
+xyplot(prof)
+confint(prof)
+splom(prof)
+dotplot(ranef(depth_lme_2_s_inttest_Length_2, condVar = TRUE))
+dotplot(fixef(depth_lme_2_s_inttest_Length_2, condVar = TRUE))
+
+depth_lme_2_s_best <- lmer(data=depthmodeldf, sqrtdepth ~ daynight + season + Tide.direction + year + Length + (1|Station.Name.New) + (1|Fish.code))
+
+coefs_simplebest <- summary(depth_lme_2_s_best)$coefficients
+coeftable_simplebest <- as.data.frame(coefs_simplebest)
+
+coeftable_simplebest$adj.coef <- round(((coeftable_simplebest$Estimate)^2),3)
+coeftable_simplebest$direction <- ifelse(coeftable_simplebest$Estimate < 0, "-", "")
+coeftable_simplebest$dir.adj.coef <- as.numeric(paste0(coeftable_simplebest$direction, coeftable_simplebest$adj.coef))
+coeftable_simplebest$variable <- row.names(coeftable_simplebest)
+names(coeftable_simplebest) <- c("Estimate", "Std.Error", "df", "t.value", "p.value", "adj.coef", "direction", "dir.adj.coef", "variable")
+coeftable_simplebest$newse <- coeftable_simplebest$Std.Error * 0.5 * coeftable_simplebest$Estimate
+coeftable_simplebest$newlowCI <- coeftable_simplebest$dir.adj.coef - (1.96*coeftable_simplebest$newse)
+coeftable_simplebest$newupCI <- coeftable_simplebest$dir.adj.coef + (1.96*coeftable_simplebest$newse)
+
+ggplot() + geom_point(data=coeftable_simplebest, aes(variable, dir.adj.coef), size=2) + 
+            figure_theme + 
+            geom_hline(y=0, lty="dashed") + 
+            geom_errorbar(data=coeftable_simplebest, aes(x=variable, ymax = newupCI, ymin=newlowCI)) +
+            geom_errorbar(data=coeftable_simplebest, aes(x=variable, ymax=(dir.adj.coef + newse), ymin=(dir.adj.coef - newse), width=0.25)) +
+            xlab("Model parameter") + 
+            ylab("Coefficient estimate") + 
+            coord_flip()
+            
+depth_lme_2_s_inttest_Length_2_stationout <- update(depth_lme_2_s_inttest_Length_2, .~. - (1|Station.Name.New))
+
+
+### From online R forge book Mixed effects modelling with R. Section 1.5.1
+output <- profile(depth_lme_2_s_inttest_Length_2)
+require(lattice)
+xyplot(output)
+confint(output)
+output_base <- profile(depth_lme_2_s_best)
+xyplot(output_base)
+splom(output_base)
+## Could choose interaction terms based on this plot. Slanted or curved lines mean that one variable depends on the other.
+  ## sig01 and Intercept
+  ## sig01 and year2012
+  ## sig01 and year2013
+  ## sig01 and Length
+  ## Intercept and year2012
+  ## Intercept and year2013
+  ## Intercept and Length
+  ## daynight and season
+  ## daynight and tide
+  ## season and tide
+  ## year2012 and year2013
+  ## year2012 and Length
+  ## year2013 and Length
+  
+## Section 1.6 Random effects
+ranef(depth_lme_2_s_inttest_Length_2)
+ranef(depth_lme_2_s_best)
+
+## I have multiple (2) simple, scalar random effects
+dotplot(ranef(depth_lme_2_s_inttest_Length_2, condVar=TRUE))
+qqmath(ranef(depth_lme_2_s_inttest_Length_2, condVar=TRUE))
+
+## Maybe I have partially crossed random effects?
+xtabs(~Detection.depth, depthmodeldf)
+
+dotplot(ranef(depth_lme_2_s_inttest_Length_2, which = "Type", condVar = TRUE), aspect = 0.2, strip = FALSE)
+
+
+
+depthmodeldf$predict_lme_jun30 <- predict(depth_lme_2_s_inttest_Length_2, depthmodeldf)
+
+diel <- ggplot() + geom_jitter(data=depthmodeldf, aes(daynight, predict_lme_jun30), colour="red", alpha=0.5) + figure_theme + ggtitle("Predicted") + theme(axis.title.y = element_blank()) + xlab("Diel")
+
+year <- ggplot() + geom_jitter(data=depthmodeldf, aes(year, predict_lme_jun30), colour="red", alpha=0.5) + figure_theme + theme(axis.title.y = element_blank()) + xlab("Year")
+
+wcdepth <- ggplot() + geom_point(data=depthmodeldf, aes(watercolumn, predict_lme_jun30), colour="red", alpha=0.5) + figure_theme + theme(axis.title.y = element_blank()) + xlab("Water column depth (m)")
+
+currentspeed <- ggplot() + geom_point(data=depthmodeldf, aes(speed, predict_lme_jun30), colour="red", alpha=0.5) + figure_theme +theme(axis.title.y = element_blank()) + xlab("Current speed (m/s)")
+
+seasonal <- ggplot() + geom_jitter(data=depthmodeldf, aes(season, predict_lme_jun30), colour="red", alpha=0.5) + figure_theme +theme(axis.title.y = element_blank()) + xlab("Season")
+
+fishlength <- ggplot() + geom_point(data=depthmodeldf, aes(Length, predict_lme_jun30), colour="red", alpha=0.5) + figure_theme+theme(axis.title.y = element_blank()) + xlab("Fork length (m)")
+
+diel_real <- ggplot() + geom_jitter(data=depthmodeldf, aes(daynight, sqrtdepth), colour="blue", alpha=0.5) + figure_theme + ylab("Detection depth\n(sqrt m)") + ggtitle("Observed") + xlab("Diel")
+
+year_real <- ggplot() + geom_jitter(data=depthmodeldf, aes(year, sqrtdepth), colour="blue", alpha=0.5) + figure_theme + ylab("Detection depth\n(sqrt m)")  + xlab("Year")
+
+wcdepth_real <- ggplot() + geom_point(data=depthmodeldf, aes(watercolumn, sqrtdepth), colour="blue", alpha=0.5) + figure_theme + ylab("Detection depth\n(sqrt m)") + xlab("Water column depth (m)")
+
+currentspeed_real <- ggplot() + geom_point(data=depthmodeldf, aes(speed, sqrtdepth), colour="blue", alpha=0.5) + figure_theme + ylab("Detection depth\n(sqrt m)") + xlab("Current speed (m/s)")
+
+seasonal_real <- ggplot() + geom_jitter(data=depthmodeldf, aes(season, sqrtdepth), colour="blue", alpha=0.5) + figure_theme + ylab("Detection depth\n(sqrt m)") + xlab("Season")
+
+fishlength_real <- ggplot() + geom_point(data=depthmodeldf, aes(Length, sqrtdepth), colour="blue", alpha=0.5) + figure_theme + ylab("Detection depth\n(sqrt m)") + xlab("Fork length (m)")
+
+## PDF 9x18
+grid.arrange(diel_real, diel, year_real, year, wcdepth_real, wcdepth, currentspeed_real, currentspeed, seasonal_real, seasonal, fishlength_real, fishlength, ncol=2, main=textGrob("Model 4: sqrt(Detection depth) ~ Diel + Year + Water column depth +\nCurrent speed + Season + Fish length + Diel:Season +\nDiel:Fish Length + (1|Fish code) + (1|Receiver station)\n ", gp=gpar(cex=1.5), vjust=0.7))
+
+
+anova(depth_lme_2_s, ......)
+anova(depth_lme_2_s_inttest_Length, depth_lme_2_s_inttest_Length_2_noyear)
+depth_lme_2_s, depth_lme_2.1_s, depth_lme_2.2_s, depth_lme_2_s_inttest_Length, depth_lme_2_s_inttest_Length_2, depth_lme_2_s_inttest_Length_2_noyear
+```
+
+### GLMM?
+```{r}
+depth_glmm_jul <- glmer(data=depthmodeldf, Detection.depth ~ daynight + year + watercolumn + speed + season + Length + (1|Fish.code) + (1|Station.Name.New), family="Gamma")
+### No. Residual plot not as good as original transformed lme
