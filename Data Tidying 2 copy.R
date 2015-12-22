@@ -450,6 +450,46 @@ MP2010 <- subset(MP2010, Station.Name %in% c("MPS01", "MPS02", "MPS03", "MPS04",
                                              "E1", "E2", "E3", "E4", "E5",
                                              "W1", "W2", "W3", "W4", "W5"))
 
+### format receiver Station Names
+cols <- colsplit(receiver2010$Station.Name, "0", c("alpha", "numeric"))
+cols$complete <- ifelse(is.na(cols$numeric)=="TRUE", cols$alpha, 
+                        ifelse(cols$numeric<10, paste0(cols$alpha, "0", cols$numeric), paste0(cols$alpha, cols$numeric)))
+receiver2010$Station.Name <- cols$complete
+
+### join receiver info to detection dataset
 MP2010_r <- join(MP2010, receiver2010, type="left")
 
+### format tagging info
 
+tagging2010 <- read.csv("/Users/freyakeyser/Desktop/Metadata/Tagging 2010.csv")
+
+tagging2010$Release.Date <- mdy(tagging2010$Release.Date)
+
+names(tagging2010) <- c("N", "Total.length", "Sex", "S.N.", "Transmitter", "Release.date", 
+                        "Capture.location", "Release.latitude", "Release.longitude")
+
+tagging2010 <- subset(tagging2010, select=c("Total.length", "Sex", "Transmitter", "Release.date",
+                                            "Capture.location"))
+
+tagging2010$Transmitter <- as.character(tagging2010$Transmitter)
+
+levels(tagging2010$Capture.location) <- c("Grand Pré", "Grand Pré", "Grand Pré", "Stewiacke")
+
+### create Fish.codes
+
+tagging2010 <- arrange(tagging2010, Release.date, Total.length)
+tagging2010$Fish.code.a <- ifelse(tagging2010$Capture.location == "Grand Pré", "G", "S")
+tagging2010$Fish.code.b <- "-0-"
+tagging2010$Fish.code.c <- 1:80
+tagging2010$Fish.code <- ifelse(tagging2010$Fish.code.c <10, 
+                                paste0(tagging2010$Fish.code.a, tagging2010$Fish.code.b, "0", tagging2010$Fish.code.c),
+                                paste0(tagging2010$Fish.code.a, tagging2010$Fish.code.b, tagging2010$Fish.code.c))
+tagging2010 <- select(tagging2010, -Fish.code.a, -Fish.code.b, -Fish.code.c)
+
+### Join tagging to detection data
+
+MP2010_r_t <- join(MP2010_r, tagging2010, type="left")
+
+### 
+ggplot() + geom_histogram(data=MP2010_r_t, aes(Fish.code)) + 
+  facet_wrap(~Capture.location, scale="free_x", nrow=2) + theme_bw()
