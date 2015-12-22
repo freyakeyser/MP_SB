@@ -4,6 +4,13 @@ MB2011 <- read.csv("/Users/freyakeyser/Documents/Acadia/ACER/Masters/2011 deploy
 MBMP2012 <- read.csv("/Users/freyakeyser/Documents/Acadia/ACER/Masters/2012-2013 deployment/Overall spreadsheets/VUE_Export_2012SB_AllReceivers_2014-05-08.csv", header=TRUE)
 gasp2011 <- read.csv("/Users/freyakeyser/Documents/Acadia/ACER/Masters/2011 deployment/VUE_Export_2011_GaspereauRiver_for Freya.csv")
 tagging <- read.csv("/Users/freyakeyser/Desktop/Metadata/Tagging Data.csv")
+guzzle2010 <- read.csv("/Users/freyakeyser/Documents/Acadia/ACER/Striped Bass - 2010/VUE_Export_2010allguzzletagged_driftcorrected_2015-09-25.csv")
+stew2010 <- read.csv("/Users/freyakeyser/Documents/Acadia/ACER/Striped Bass - 2010/VUE_Export_2010allstewiacketagged_driftcorrected_2015-09-25.csv")
+
+length(MP2011$Date.and.Time..UTC.)
+length(MP2010$Date.and.Time..UTC.)
+length(MBMP2012$Date.and.Time..UTC.)
+
 
 citation()
 
@@ -11,10 +18,16 @@ require(plyr)
 require(reshape2)
 require(lubridate)
 require(ggplot2)
+require(dplyr)
 
 # Make column names consistent
-names(MP2011) <- c("Date.and.Time..UTC.", "Month", "Detection.Number", "Transmitter", "Fish.Code", "Fish.Number", "Sensor.Value", "Detection.Depth", "Height.above.bottom", "Station.Name", "Depth", "Receiver", "Latitude", "Longitude", "Tagging.location", "Fork.Length", "Fork.Length.Bin", "Array", "Date_Time.AST.ADT", "Hour.AST", "Sunrise.Date_Time.UTC", "Sunrise.Date_Time.AST", "Sunset.Date_Time.UTC", "Sunset.Date_Time.AST", "Day", "Night", "Twilight", "Day_Night_Twilight")
-
+names(MP2011) <- c("Date.and.Time..UTC.", "Month", "Detection.Number", "Transmitter", 
+                   "Fish.Code", "Fish.Number", "Sensor.Value", "Detection.Depth", 
+                   "Height.above.bottom", "Station.Name", "Depth", "Receiver", 
+                   "Latitude", "Longitude", "Tagging.location", "Fork.Length", 
+                   "Fork.Length.Bin", "Array", "Date_Time.AST.ADT", "Hour.AST", 
+                   "Sunrise.Date_Time.UTC", "Sunrise.Date_Time.AST", "Sunset.Date_Time.UTC", 
+                   "Sunset.Date_Time.AST", "Day", "Night", "Twilight", "Day_Night_Twilight")
 
 # Subset for only necessary detection information columns
 MP2011 <- subset(MP2011, select=c("Date.and.Time..UTC.", "Receiver", "Transmitter", "Sensor.Value"))    
@@ -405,3 +418,38 @@ t.test(Stewfish$Length, Kingsfish$Length)
 # sample estimates:
 #   mean of x mean of y 
 # 0.7023704 0.6734286 
+
+
+#### Adding 2010 data to MP_ALL
+MP_all <- read.csv("/Users/freyakeyser/Documents/Acadia/ACER/Masters/Overall spreadsheets:figures/Detections_MP_2011-2013.csv")
+receiver2010 <- read.csv("/Users/freyakeyser/Desktop/Metadata/Receivers 2010-2013.csv")
+
+names(receiver2010) <- c("OTN_ARRAY", "Station.Name", "CDN", "Deploy.date.and.time", "Recover.date.and.time", "Deploy.lat", "Deploy.long",
+                         "S.N.")
+receiver2010$Deploy.date.and.time <- mdy_hms(receiver2010$Deploy.date.and.time)
+receiver2010$Recover.date.and.time <- mdy_hms(receiver2010$Recover.date.and.time)
+receiver2010$year <- year(receiver2010$Deploy.date.and.time)
+receiver2010 <- subset(receiver2010, year=="2010", select=c("Station.Name", "Deploy.date.and.time", "Recover.date.and.time", "Deploy.lat", "Deploy.long", "year"))
+receiver2010 <- rbind(receiver2010[1:16,],receiver2010[18:23,])
+
+### join 2010 guzzle and stew
+MP2010 <- join(guzzle2010, stew2010, type="full")
+MP2010 <- select(MP2010, Date.and.Time..UTC., Receiver, Transmitter, Sensor.Value,
+                 Station.Name, Latitude, Longitude)
+
+cols <- colsplit(MP2010$Receiver, "-", c("alpha", "numeric"))
+MP2010$Receiver <- as.character(cols$numeric)
+
+cols <- colsplit(MP2010$Transmitter, "-", c("alpha", "numeric", "id"))
+MP2010$Transmitter <- as.character(cols$id)
+
+MP2010$Date.and.Time..UTC. <- ymd_hms(MP2010$Date.and.Time..UTC.)
+
+MP2010 <- subset(MP2010, Station.Name %in% c("MPS01", "MPS02", "MPS03", "MPS04", "MPS05", "MPS06",
+                                             "MPS07", "MPS08", "MPS09", "MPS10", "MPS11", "MPS12",
+                                             "E1", "E2", "E3", "E4", "E5",
+                                             "W1", "W2", "W3", "W4", "W5"))
+
+MP2010_r <- join(MP2010, receiver2010, type="left")
+
+
