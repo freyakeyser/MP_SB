@@ -1,11 +1,12 @@
-receiver <- read.csv("/Users/freyakeyser/Desktop/Metadata/Receiver Data.csv")
-MP2011 <- read.csv("/Users/freyakeyser/Documents/Acadia/ACER/2013 Summer/2011 Minas Passage/Spreadsheets/2011 Striped Bass - All Detects - Drift Corrected - 2013-12-10.csv" , header=TRUE)
-MB2011 <- read.csv("/Users/freyakeyser/Documents/Acadia/ACER/Masters/2011 deployment/VUE_Export_2011SB_MinasBasin_2014-05-23.csv")
-MBMP2012 <- read.csv("/Users/freyakeyser/Documents/Acadia/ACER/Masters/2012-2013 deployment/Overall spreadsheets/VUE_Export_2012SB_AllReceivers_2014-05-08.csv", header=TRUE)
-gasp2011 <- read.csv("/Users/freyakeyser/Documents/Acadia/ACER/Masters/2011 deployment/VUE_Export_2011_GaspereauRiver_for Freya.csv")
-tagging <- read.csv("/Users/freyakeyser/Desktop/Metadata/Tagging Data.csv")
-guzzle2010 <- read.csv("/Users/freyakeyser/Documents/Acadia/ACER/Striped Bass - 2010/VUE_Export_2010allguzzletagged_driftcorrected_2015-09-25.csv")
-stew2010 <- read.csv("/Users/freyakeyser/Documents/Acadia/ACER/Striped Bass - 2010/VUE_Export_2010allstewiacketagged_driftcorrected_2015-09-25.csv")
+receiver <- read.csv("/Volumes/Macintosh HD//Users/freyakeyser/Desktop/Metadata/Receiver Data.csv")
+MP2011 <- read.csv("/Volumes/Macintosh HD//Users/freyakeyser/Documents/Acadia/ACER/2013 Summer/2011 Minas Passage/Spreadsheets/2011 Striped Bass - All Detects - Drift Corrected - 2013-12-10.csv" , header=TRUE)
+MB2011 <- read.csv("/Volumes/Macintosh HD//Users/freyakeyser/Documents/Acadia/ACER/Masters/2011 deployment/VUE_Export_2011SB_MinasBasin_2014-05-23.csv")
+MBMP2012 <- read.csv("/Volumes/Macintosh HD//Users/freyakeyser/Documents/Acadia/ACER/Masters/2012-2013 deployment/Overall spreadsheets/VUE_Export_2012SB_AllReceivers_2014-05-08.csv", header=TRUE)
+gasp2011 <- read.csv("/Volumes/Macintosh HD//Users/freyakeyser/Documents/Acadia/ACER/Masters/2011 deployment/VUE_Export_2011_GaspereauRiver_for Freya.csv")
+tagging <- read.csv("/Volumes/Macintosh HD//Users/freyakeyser/Desktop/Metadata/Tagging Data.csv")
+guzzle2010 <- read.csv("/Volumes/Macintosh HD//Users/freyakeyser/Documents/Acadia/ACER/Striped Bass - 2010/VUE_Export_2010allguzzletagged_driftcorrected_2015-09-25.csv")
+stew2010 <- read.csv("/Volumes/Macintosh HD//Users/freyakeyser/Documents/Acadia/ACER/Striped Bass - 2010/VUE_Export_2010allstewiacketagged_driftcorrected_2015-09-25.csv")
+MPS07 <- read.csv("/Volumes/Macintosh HD/Users/freyakeyser/Documents/Acadia/ACER/Masters/2012-2013 deployment/Overall spreadsheets/VUE_Export_106584_Winter2012-13_SB.csv", header=TRUE)
 
 length(MP2011$Date.and.Time..UTC.)
 length(MP2010$Date.and.Time..UTC.)
@@ -34,6 +35,9 @@ MP2011 <- subset(MP2011, select=c("Date.and.Time..UTC.", "Receiver", "Transmitte
 MB2011 <- subset(MB2011, select=c("Date.and.Time..UTC.", "Receiver", "Transmitter", "Sensor.Value"))
 MBMP2012 <- subset(MBMP2012, select=c("Date.and.Time..UTC.", "Receiver", "Transmitter", "Sensor.Value"))
 gasp2011 <- subset(gasp2011, select=c("Date.and.Time..UTC.", "Receiver", "Transmitter", "Sensor.Value"))
+MPS07 <- subset(MPS07, select=c("Date.and.Time..UTC.", "Receiver", "Transmitter", "Sensor.Value"))
+
+MBMP2012 <- rbind(MBMP2012, MPS07) 
 
 # Make data format consistent between spreadsheets
 MB2011$Receiver <- as.factor(MB2011$Receiver)
