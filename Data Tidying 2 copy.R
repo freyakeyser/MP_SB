@@ -1,19 +1,14 @@
-receiver <- read.csv("/Volumes/Macintosh HD//Users/freyakeyser/Desktop/Metadata/Receiver Data.csv")
-MP2011 <- read.csv("/Volumes/Macintosh HD//Users/freyakeyser/Documents/Acadia/ACER/2013 Summer/2011 Minas Passage/Spreadsheets/2011 Striped Bass - All Detects - Drift Corrected - 2013-12-10.csv" , header=TRUE)
-MB2011 <- read.csv("/Volumes/Macintosh HD//Users/freyakeyser/Documents/Acadia/ACER/Masters/2011 deployment/VUE_Export_2011SB_MinasBasin_2014-05-23.csv")
-MBMP2012 <- read.csv("/Volumes/Macintosh HD//Users/freyakeyser/Documents/Acadia/ACER/Masters/2012-2013 deployment/Overall spreadsheets/VUE_Export_2012SB_AllReceivers_2014-05-08.csv", header=TRUE)
-gasp2011 <- read.csv("/Volumes/Macintosh HD//Users/freyakeyser/Documents/Acadia/ACER/Masters/2011 deployment/VUE_Export_2011_GaspereauRiver_for Freya.csv")
-tagging <- read.csv("/Volumes/Macintosh HD//Users/freyakeyser/Desktop/Metadata/Tagging Data.csv")
-guzzle2010 <- read.csv("/Volumes/Macintosh HD//Users/freyakeyser/Documents/Acadia/ACER/Striped Bass - 2010/VUE_Export_2010allguzzletagged_driftcorrected_2015-09-25.csv")
-stew2010 <- read.csv("/Volumes/Macintosh HD//Users/freyakeyser/Documents/Acadia/ACER/Striped Bass - 2010/VUE_Export_2010allstewiacketagged_driftcorrected_2015-09-25.csv")
+receiver <- read.csv("/Volumes/Macintosh HD/Users/freyakeyser/Desktop/Metadata/Receiver Data.csv")
+MP2011 <- read.csv("/Volumes/Macintosh HD/Users/freyakeyser/Documents/Acadia/ACER/2013 Summer/2011 Minas Passage/Spreadsheets/2011 Striped Bass - All Detects - Drift Corrected - 2013-12-10.csv" , header=TRUE)
+MB2011 <- read.csv("/Volumes/Macintosh HD/Users/freyakeyser/Documents/Acadia/ACER/Masters/2011 deployment/VUE_Export_2011SB_MinasBasin_2014-05-23.csv")
+MBMP2012 <- read.csv("/Volumes/Macintosh HD/Users/freyakeyser/Documents/Acadia/ACER/Masters/2012-2013 deployment/Overall spreadsheets/VUE_Export_2012SB_AllReceivers_2014-05-08.csv", header=TRUE)
+gasp2011 <- read.csv("/Volumes/Macintosh HD/Users/freyakeyser/Documents/Acadia/ACER/Masters/2011 deployment/VUE_Export_2011_GaspereauRiver_for Freya.csv")
+tagging <- read.csv("/Volumes/Macintosh HD/Users/freyakeyser/Desktop/Metadata/Tagging Data.csv")
 MPS07 <- read.csv("/Volumes/Macintosh HD/Users/freyakeyser/Documents/Acadia/ACER/Masters/2012-2013 deployment/Overall spreadsheets/VUE_Export_106584_Winter2012-13_SB.csv", header=TRUE)
 
-length(MP2011$Date.and.Time..UTC.)
-length(MP2010$Date.and.Time..UTC.)
-length(MBMP2012$Date.and.Time..UTC.)
-
-
-citation()
+# length(MP2011$Date.and.Time..UTC.)
+# length(MP2010$Date.and.Time..UTC.)
+# length(MBMP2012$Date.and.Time..UTC.)
 
 require(plyr)
 require(reshape2)
@@ -37,9 +32,8 @@ MBMP2012 <- subset(MBMP2012, select=c("Date.and.Time..UTC.", "Receiver", "Transm
 gasp2011 <- subset(gasp2011, select=c("Date.and.Time..UTC.", "Receiver", "Transmitter", "Sensor.Value"))
 MPS07 <- subset(MPS07, select=c("Date.and.Time..UTC.", "Receiver", "Transmitter", "Sensor.Value"))
 
-MBMP2012 <- rbind(MBMP2012, MPS07) 
-
 # Make data format consistent between spreadsheets
+
 MB2011$Receiver <- as.factor(MB2011$Receiver)
 
 cols <- colsplit(MB2011$Receiver, "-", c("alpha", "numeric"))
@@ -66,6 +60,7 @@ MP2011$Date.and.Time..UTC. <- mdy_hms(MP2011$Date.and.Time..UTC.)
 MB2011$Date.and.Time..UTC. <- mdy_hms(MB2011$Date.and.Time..UTC.)
 MBMP2012$Date.and.Time..UTC. <- mdy_hms(MBMP2012$Date.and.Time..UTC.)
 gasp2011$Date.and.Time..UTC. <- mdy_hms(gasp2011$Date.and.Time..UTC.)
+MPS07$Date.and.Time..UTC. <- ymd_hms(MPS07$Date.and.Time..UTC.)
 
 MBMP2012$Receiver <- as.factor(MBMP2012$Receiver)
 levels(MBMP2012$Receiver)
@@ -78,6 +73,14 @@ MBMP2012$Transmitter <- as.factor(MBMP2012$Transmitter)
 levels(MBMP2012$Transmitter)
 cols <- colsplit(MBMP2012$Transmitter, "-", c("alpha", "middle", "numeric"))
 MBMP2012$Transmitter <- as.character(cols$numeric)
+
+MPS07$Receiver <- as.factor(MPS07$Receiver)
+MPS07$Receiver <- "106584"
+
+MPS07$Transmitter <- as.factor(MPS07$Transmitter)
+levels(MPS07$Transmitter)
+cols <- colsplit(MPS07$Transmitter, "-", c("alpha", "middle", "numeric"))
+MPS07$Transmitter <- as.character(cols$numeric)
 
 # Join two dataframes together
 merge1 <- join(MBMP2012, MB2011, type="full")
@@ -95,11 +98,14 @@ gasp2011$Receiver <- as.character(gasp2011$Receiver)
 gasp2011$Transmitter <- as.character(gasp2011$Transmitter)
 gasp2011$Sensor.Value <- as.numeric(gasp2011$Sensor.Value)
 
-# Join last dataframe
+# Join another dataframe
 merge3 <- join(merge2, gasp2011, type="full")
 
+# Join another dataframe
+merge4 <- join(merge3, MPS07, type="full")
+
 # tagdata contains ALL DETECTIONS
-tagdata <- merge3
+tagdata <- merge4
 
 tagdata$Date.and.Time..UTC. <- ymd_hms(tagdata$Date.and.Time..UTC.)
 
@@ -121,8 +127,6 @@ receiver$Station.Name <- as.character(receiver$Station.Name)
 receiver$Station.Name <- as.factor(receiver$Station.Name)
 receiver$Deploy.Date.and.Time <- ymd_hms(receiver$Deploy.Date.and.Time)
 receiver$Recover.Date.and.Time <- ymd_hms(receiver$Recover.Date.and.Time)
-
-write.csv(receiver, "/Users/freyakeyser/Documents/Acadia/ACER/Masters/Overall spreadsheets:figures/Receiver metadata.csv")
 
 # Merge receiver data and tag data. There will be duplicated rows whenever the same receiver was redeployed
 receivertag <- merge(tagdata, receiver, by="Receiver", all=TRUE)
@@ -182,8 +186,6 @@ tagging$year <- year(tagging$Release.date.time)
 
 levels(tagging$Capture.location) <- c("Grand Pré", "Grand Pré", "Stewiacke", "Stewiacke", "Kingsport", "Stewiacke")
 
-write.csv(tagging, "/Users/freyakeyser/Documents/Acadia/ACER/Masters/Overall spreadsheets:figures/Tagging metadata.csv")
-
 # Merge tagging data with final detection data
 receivertag2 <- merge(receivertagfinal, tagging, by="Transmitter")
 
@@ -196,7 +198,7 @@ v13$Detection.depth <- 0.4397*(v13$Sensor.Value)-1.7587
 v16 <- subset(receivertag2, Transmitter>14376)
 v16$Detection.depth <- 0.6065*(v16$Sensor.Value)-2.4258
 
-receivertag2 <- merge(v13, v16, all=TRUE)
+receivertag2 <- join(v13, v16, type="full")
 
 receivertag3 <- cbind(receivertag2[3],receivertag2[1:2], receivertag2[6], receivertag2[5], 
                       receivertag2[10:11], receivertag2[4], receivertag2[23], receivertag2[20], receivertag2[21], 
@@ -233,11 +235,11 @@ winterdata <- subset(alldata, year == 2012 & month == 12 | year == 2013 & month 
 
 ### WRITE ALL DATA TO SEPARATE CSV
 
-write.csv(alldata, "/Users/freyakeyser/Documents/Acadia/ACER/Masters/Overall spreadsheets:figures/Detections_MP_MB_2011-2013.csv")
+write.csv(alldata, "/Volumes/Macintosh HD/Users/freyakeyser/Documents/Acadia/ACER/Masters/Overall spreadsheets:figures/Detections_MP_MB_2011-2013_Jan2016.csv")
 
 ### WRITE WINTER DATA TO SEPARATE CSV
 
-write.csv(winterdata, "/Users/freyakeyser/Documents/Acadia/ACER/Masters/Overall spreadsheets:figures/Winter 2012-2013_Oct31.csv")
+write.csv(winterdata, "/Volumes/Macintosh HD/Users/freyakeyser/Documents/Acadia/ACER/Masters/Overall spreadsheets:figures/Winter 2012-2013_Jan2016.csv")
 
 winterfish <- subset(winterdata, select=c("Fish.code", "Length"))
 unique(winterfish)
@@ -256,10 +258,6 @@ write.csv(basindata, "/Users/freyakeyser/Documents/Acadia/ACER/Masters/Overall s
 
 write.csv(AUL, "/Users/freyakeyser/Documents/Acadia/ACER/Masters/Overall spreadsheets:figures/AUL detections.csv")
 
-### Correcting tagging location names
-
-levels(alldata$Capture.location) <- c("Grand Pré", "Grand Pré", "Stewiacke", "Stewiacke", "Kingsport", "Stewiacke")
-
 ### Subset MP years
 
 MP_all <- subset(alldata, Station.Name=="AUL-T1" | Station.Name=="AUL-T2" | Station.Name=="AUL-T3" | Station.Name=="AUL-01" | 
@@ -274,12 +272,135 @@ MP_all <- subset(alldata, Station.Name=="AUL-T1" | Station.Name=="AUL-T2" | Stat
 MP_2011 <- subset(MP_all, year==2011)
 MP_2012 <- subset(MP_all, year==2012 | year==2013)
 MP_2012 <- subset(MP_2012, !Station.Name %in% c("AUL-T1"))
+AUL_T1 <- subset(MP_2012, Station.Name == "AUL-T1")
 
 MP_2012$season <- ifelse(MP_2012$Date.and.Time..UTC.<"2012-12-01 00:00:00 UTC", "Spring/Summer/Fall", "Winter")
 
+### ADD 2010 MINAS PASSAGE DATA TO MP_all
+
+guzzle2010 <- read.csv("/Volumes/Macintosh HD/Users/freyakeyser/Documents/Acadia/ACER/Striped Bass - 2010/VUE_Export_2010allguzzletagged_driftcorrected_2015-09-25.csv")
+stew2010 <- read.csv("/Volumes/Macintosh HD/Users/freyakeyser/Documents/Acadia/ACER/Striped Bass - 2010/VUE_Export_2010allstewiacketagged_driftcorrected_2015-09-25.csv")
+receiver2010 <- read.csv("/Volumes/Macintosh HD/Users/freyakeyser/Desktop/Metadata/Receivers 2010-2013.csv")
+tagging2010 <- read.csv("/Volumes/Macintosh HD/Users/freyakeyser/Desktop/Metadata/Tagging 2010.csv")
+
+guzzle2010 <- subset(guzzle2010, select=c("Date.and.Time..UTC.", "Receiver", "Transmitter", "Sensor.Value")) 
+stew2010 <- subset(stew2010, select=c("Date.and.Time..UTC.", "Receiver", "Transmitter", "Sensor.Value")) 
+
+# Make data format consistent between spreadsheets
+guzzle2010$Receiver <- as.factor(guzzle2010$Receiver)
+
+cols <- colsplit(guzzle2010$Receiver, "-", c("alpha", "numeric"))
+cols$complete <- ifelse(is.na(cols$numeric), cols$alpha, cols$numeric)
+guzzle2010$Receiver <- as.character(cols$complete)
+
+guzzle2010$Transmitter <- as.factor(guzzle2010$Transmitter)
+
+cols <- colsplit(guzzle2010$Transmitter, "-", c("alpha", "middle", "numeric"))
+guzzle2010$Transmitter <- as.character(cols$numeric)
+
+stew2010$Receiver <- as.factor(stew2010$Receiver)
+
+cols <- colsplit(stew2010$Receiver, "-", c("alpha", "numeric"))
+cols$complete <- ifelse(is.na(cols$numeric), cols$alpha, cols$numeric)
+stew2010$Receiver <- as.character(cols$complete)
+
+stew2010$Transmitter <- as.factor(stew2010$Transmitter)
+
+cols <- colsplit(stew2010$Transmitter, "-", c("alpha", "middle", "numeric"))
+stew2010$Transmitter <- as.character(cols$numeric)
+
+guzzle2010$Date.and.Time..UTC. <- ymd_hms(guzzle2010$Date.and.Time..UTC.)
+stew2010$Date.and.Time..UTC. <- ymd_hms(stew2010$Date.and.Time..UTC.)
+
+MP_2010 <- join(guzzle2010, stew2010, type="full")
+#summary(MP_2010)
+
+### add 2010 receivers
+receiver2010 <- read.csv("/Volumes/Macintosh HD/Users/freyakeyser/Desktop/Metadata/Receivers 2010-2013.csv")
+
+names(receiver2010) <- c("Array", "Station.Name", "CDN", "Deploy.Date.and.Time", "Recover.Date.and.Time", "Latitude", "Longitude",
+                         "Receiver")
+receiver2010 <- subset(receiver2010, select=c("Array", "Station.Name", "CDN", "Deploy.Date.and.Time", "Recover.Date.and.Time", "Latitude", "Longitude",
+                                              "Receiver"))
+receiver2010$Deploy.Date.and.Time <- mdy_hms(receiver2010$Deploy.Date.and.Time)
+receiver2010$Recover.Date.and.Time <- mdy_hms(receiver2010$Recover.Date.and.Time)
+receiver2010$year <- year(receiver2010$Deploy.Date.and.Time)
+receiver2010 <- subset(receiver2010, year=="2010")
+receiver2010$Station.Name <- as.character(receiver2010$Station.Name)
+receiver2010 <- rbind(receiver2010[1:16,],receiver2010[18:23,])
+
+receiver2010$Station.Name <- as.factor(receiver2010$Station.Name)
+levels(receiver2010$Station.Name) <- c("E-01", "E-02", "E-03", "E-04", "E-05", "MPS-01", "MPS-02", "MPS-03", "MPS-04", "MPS-05", "MPS-06",
+                                       "MPS-07", "MPS-08", "MPS-09", "MPS-10", "MPS-11", "MPS-12", "W-01", "W-02", "W-03", "W-04", "W-05")
+
+receiver_full <- join(receiver, receiver2010, type="full")
+
+write.csv(receiver_full, "/Volumes/Macintosh HD/Users/freyakeyser/Documents/Acadia/ACER/Masters/Overall spreadsheets:figures/Receiver metadata_Jan2016.csv")
+
+
+### tagging 2010
+
+tagging2010$Release.Date <- mdy(tagging2010$Release.Date)
+
+names(tagging2010) <- c("N", "Total.length", "Sex", "S.N.", "Transmitter", "Release.date", 
+                        "Capture.location", "Release.latitude", "Release.longitude")
+
+tagging2010 <- subset(tagging2010, select=c("Total.length", "Sex", "Transmitter", "Release.date",
+                                            "Capture.location"))
+
+tagging2010$Transmitter <- as.character(tagging2010$Transmitter)
+
+levels(tagging2010$Capture.location) <- c("Grand Pré", "Grand Pré", "Grand Pré", "Stewiacke")
+
+### create Fish.codes
+
+tagging2010 <- arrange(tagging2010, Release.date, Total.length)
+tagging2010$Fish.code.a <- ifelse(tagging2010$Capture.location == "Grand Pré", "G", "S")
+tagging2010$Fish.code.b <- "-0-"
+tagging2010$Fish.code.c <- 1:80
+tagging2010$Fish.code <- ifelse(tagging2010$Fish.code.c <10, 
+                                paste0(tagging2010$Fish.code.a, tagging2010$Fish.code.b, "0", tagging2010$Fish.code.c),
+                                paste0(tagging2010$Fish.code.a, tagging2010$Fish.code.b, tagging2010$Fish.code.c))
+tagging2010 <- select(tagging2010, -Fish.code.a, -Fish.code.b, -Fish.code.c)
+
+tagging2010$Est.tag.life <- ifelse(tagging2010$Capture.location=="Stewiacke", 214, 170)
+
+names(tagging)
+names(tagging2010)
+
+tagging_full <- join(tagging, tagging2010, type="full")
+
+write.csv(tagging_full, "/Volumes/Macintosh HD/Users/freyakeyser/Documents/Acadia/ACER/Masters/Overall spreadsheets:figures/Tagging metadata_Jan2016.csv")
+
+
+### join receiver and tagging to MP_2010
+receiver2010$Receiver <- as.numeric(receiver2010$Receiver)
+MP_2010$Receiver <- as.numeric(MP_2010$Receiver) 
+MP_2010$Transmitter <- as.numeric(MP_2010$Transmitter) 
+MP_2010_2 <- join(MP_2010, receiver2010, type="inner")
+
+tagging2010$Transmitter <- as.numeric(tagging2010$Transmitter)
+
+MP_2010_2 <- join(MP_2010_2, tagging2010, type="inner")
+
+ggplot() + geom_point(data=MP_2010_2, aes(Date.and.Time..UTC., Latitude)) + facet_wrap(~Fish.code) + figure_theme
+ggplot() + geom_histogram(data=MP_2010_2, aes(Station.Name))
+ggplot() + geom_histogram(data=MP_2010_2, aes(Fish.code))
+
+## join with MP_all
+
+names(MP_all)
+names(MP_2010_2)
+
+### Includes AUL-T1 in 2012
+MP_all <- join(MP_all, MP_2010_2, type="full") 
+
 ### WRITE MINAS PASSAGE DATA TO SEPARATE CSV
 
-write.csv(MP_all, "/Users/freyakeyser/Documents/Acadia/ACER/Masters/Overall spreadsheets:figures/Detections_MP_2011-2013.csv")
+write.csv(MP_all, "/Volumes/Macintosh HD/Users/freyakeyser/Documents/Acadia/ACER/Masters/Overall spreadsheets:figures/Detections_MP_2010-2013_Jan2016.csv")
+
+MP_all <- read.csv("/Volumes/Macintosh HD/Users/freyakeyser/Documents/Acadia/ACER/Masters/Overall spreadsheets:figures/Detections_MP_2010-2013_Jan2016.csv", header=TRUE)
+
 
 ### For modelled data from Brian
 
@@ -422,78 +543,3 @@ t.test(Stewfish$Length, Kingsfish$Length)
 # sample estimates:
 #   mean of x mean of y 
 # 0.7023704 0.6734286 
-
-
-#### Adding 2010 data to MP_ALL
-MP_all <- read.csv("/Users/freyakeyser/Documents/Acadia/ACER/Masters/Overall spreadsheets:figures/Detections_MP_2011-2013.csv")
-receiver2010 <- read.csv("/Users/freyakeyser/Desktop/Metadata/Receivers 2010-2013.csv")
-
-names(receiver2010) <- c("OTN_ARRAY", "Station.Name", "CDN", "Deploy.date.and.time", "Recover.date.and.time", "Deploy.lat", "Deploy.long",
-                         "S.N.")
-receiver2010$Deploy.date.and.time <- mdy_hms(receiver2010$Deploy.date.and.time)
-receiver2010$Recover.date.and.time <- mdy_hms(receiver2010$Recover.date.and.time)
-receiver2010$year <- year(receiver2010$Deploy.date.and.time)
-receiver2010 <- subset(receiver2010, year=="2010", select=c("Station.Name", "Deploy.date.and.time", "Recover.date.and.time", "Deploy.lat", "Deploy.long", "year"))
-receiver2010 <- rbind(receiver2010[1:16,],receiver2010[18:23,])
-
-### join 2010 guzzle and stew
-MP2010 <- join(guzzle2010, stew2010, type="full")
-MP2010 <- select(MP2010, Date.and.Time..UTC., Receiver, Transmitter, Sensor.Value,
-                 Station.Name, Latitude, Longitude)
-
-cols <- colsplit(MP2010$Receiver, "-", c("alpha", "numeric"))
-MP2010$Receiver <- as.character(cols$numeric)
-
-cols <- colsplit(MP2010$Transmitter, "-", c("alpha", "numeric", "id"))
-MP2010$Transmitter <- as.character(cols$id)
-
-MP2010$Date.and.Time..UTC. <- ymd_hms(MP2010$Date.and.Time..UTC.)
-
-MP2010 <- subset(MP2010, Station.Name %in% c("MPS01", "MPS02", "MPS03", "MPS04", "MPS05", "MPS06",
-                                             "MPS07", "MPS08", "MPS09", "MPS10", "MPS11", "MPS12",
-                                             "E1", "E2", "E3", "E4", "E5",
-                                             "W1", "W2", "W3", "W4", "W5"))
-
-### format receiver Station Names
-cols <- colsplit(receiver2010$Station.Name, "0", c("alpha", "numeric"))
-cols$complete <- ifelse(is.na(cols$numeric)=="TRUE", cols$alpha, 
-                        ifelse(cols$numeric<10, paste0(cols$alpha, "0", cols$numeric), paste0(cols$alpha, cols$numeric)))
-receiver2010$Station.Name <- cols$complete
-
-### join receiver info to detection dataset
-MP2010_r <- join(MP2010, receiver2010, type="left")
-
-### format tagging info
-
-tagging2010 <- read.csv("/Users/freyakeyser/Desktop/Metadata/Tagging 2010.csv")
-
-tagging2010$Release.Date <- mdy(tagging2010$Release.Date)
-
-names(tagging2010) <- c("N", "Total.length", "Sex", "S.N.", "Transmitter", "Release.date", 
-                        "Capture.location", "Release.latitude", "Release.longitude")
-
-tagging2010 <- subset(tagging2010, select=c("Total.length", "Sex", "Transmitter", "Release.date",
-                                            "Capture.location"))
-
-tagging2010$Transmitter <- as.character(tagging2010$Transmitter)
-
-levels(tagging2010$Capture.location) <- c("Grand Pré", "Grand Pré", "Grand Pré", "Stewiacke")
-
-### create Fish.codes
-
-tagging2010 <- arrange(tagging2010, Release.date, Total.length)
-tagging2010$Fish.code.a <- ifelse(tagging2010$Capture.location == "Grand Pré", "G", "S")
-tagging2010$Fish.code.b <- "-0-"
-tagging2010$Fish.code.c <- 1:80
-tagging2010$Fish.code <- ifelse(tagging2010$Fish.code.c <10, 
-                                paste0(tagging2010$Fish.code.a, tagging2010$Fish.code.b, "0", tagging2010$Fish.code.c),
-                                paste0(tagging2010$Fish.code.a, tagging2010$Fish.code.b, tagging2010$Fish.code.c))
-tagging2010 <- select(tagging2010, -Fish.code.a, -Fish.code.b, -Fish.code.c)
-
-### Join tagging to detection data
-
-MP2010_r_t <- join(MP2010_r, tagging2010, type="left")
-
-### 
-ggplot() + geom_histogram(data=MP2010_r_t, aes(Fish.code)) + 
-  facet_wrap(~Capture.location, scale="free_x", nrow=2) + theme_bw()

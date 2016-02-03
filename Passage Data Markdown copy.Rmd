@@ -14,8 +14,9 @@ require(dplyr)
 
 ## Import MP_all. Created in Data Tidying 2 script.
 ```{r}
-MP_all <- read.csv("/Users/freyakeyser/Documents/Acadia/ACER/Masters/Overall spreadsheets:figures/Detections_MP_2011-2013.csv")
+MP_all <- read.csv("/Volumes/Macintosh HD/Users/freyakeyser/Documents/Acadia/ACER/Masters/Overall spreadsheets:figures/Detections_MP_2010-2013_Jan2016.csv")
 
+MP_2010 <- subset(MP_all, year=="2010")
 MP_2011 <- subset(MP_all, year=="2011")
 MP_2012 <- subset(MP_all, year>2011)
 MP_2012$Date.and.Time..UTC. <- ymd_hms(MP_2012$Date.and.Time..UTC.)
@@ -24,11 +25,12 @@ MP_2012 <- subset(MP_2012, Date.and.Time..UTC. < "2013-04-01 00:00:00")
 #View(MP_2011)
 #View(MP_2012)
 
-receiver <- read.csv("/Users/freyakeyser/Documents/Acadia/ACER/Masters/Overall spreadsheets:figures/Receiver metadata.csv")
+receiver <- read.csv("/Volumes/Macintosh HD/Users/freyakeyser/Documents/Acadia/ACER/Masters/Overall spreadsheets:figures/Receiver metadata_Jan2016.csv")
 receiver$Deploy.Date.and.Time <- ymd_hms(receiver$Deploy.Date.and.Time)
 receiver$Deploy.year <- year(receiver$Deploy.Date.and.Time)
 
-tagging <- read.csv("/Users/freyakeyser/Documents/Acadia/ACER/Masters/Overall spreadsheets:figures/Tagging metadata.csv")
+tagging <- read.csv("/Volumes/Macintosh HD/Users/freyakeyser/Documents/Acadia/ACER/Masters/Overall spreadsheets:figures/Tagging metadata_Jan2016.csv")
+tagging_2010 <- subset(tagging, year=="2010")
 tagging_2011 <- subset(tagging, year=="2011")
 tagging_2012 <- subset(tagging, year=="2012")
 ```
@@ -758,10 +760,11 @@ reccounts_dd_2012_winter$Fish.code <- factor(reccounts_dd_2012_winter$Fish.code 
 
 # show X for MPS-03
 MPS_03_winter <- filter(passagereceivers2012_summer, Station.Name=="MPS-03")
+passagereceivers2012_winter <- subset(passagereceivers2012_winter, !Station.Name=="MPS-03")
 
 # Build basemap
 
-map_sp <- readShapeSpatial("/Users/freyakeyser/Desktop/Shapefiles 2/New_Polygon.shp")
+map_sp <- readShapeSpatial("/Volumes/Macintosh HD/Users/freyakeyser/Desktop/Shapefiles 2/New_Polygon.shp")
 map <- fortify(map_sp)
 SP <- SpatialPoints(cbind(map$long, map$lat),
                     proj4string=CRS("+proj=utm +zone=20 +datum=WGS84 +units=m +no_defs "))
