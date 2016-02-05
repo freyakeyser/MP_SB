@@ -399,7 +399,7 @@ MP_all <- join(MP_all, MP_2010_2, type="full")
 
 write.csv(MP_all, "/Volumes/Macintosh HD/Users/freyakeyser/Documents/Acadia/ACER/Masters/Overall spreadsheets:figures/Detections_MP_2010-2013_Jan2016.csv")
 
-MP_all <- read.csv("/Volumes/Macintosh HD/Users/freyakeyser/Documents/Acadia/ACER/Masters/Overall spreadsheets:figures/Detections_MP_2010-2013_Jan2016.csv", header=TRUE)
+#MP_all <- read.csv("/Volumes/Macintosh HD/Users/freyakeyser/Documents/Acadia/ACER/Masters/Overall spreadsheets:figures/Detections_MP_2010-2013_Jan2016.csv", header=TRUE)
 
 
 ### For modelled data from Brian

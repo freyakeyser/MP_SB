@@ -11,6 +11,7 @@ require(rgdal)
 require(gridExtra)
 require(lubridate)
 require(dplyr)
+require(scales)
 
 ## Import MP_all. Created in Data Tidying 2 script.
 ```{r}
@@ -30,13 +31,57 @@ receiver$Deploy.Date.and.Time <- ymd_hms(receiver$Deploy.Date.and.Time)
 receiver$Deploy.year <- year(receiver$Deploy.Date.and.Time)
 
 tagging <- read.csv("/Volumes/Macintosh HD/Users/freyakeyser/Documents/Acadia/ACER/Masters/Overall spreadsheets:figures/Tagging metadata_Jan2016.csv")
-tagging_2010 <- subset(tagging, year=="2010")
-tagging_2011 <- subset(tagging, year=="2011")
-tagging_2012 <- subset(tagging, year=="2012")
+tagging$Release.date <- ymd(tagging$Release.date)
+tagging$Release.year <- year(tagging$Release.date)
+tagging_2010 <- subset(tagging, Release.year=="2010")
+tagging_2011 <- subset(tagging, Release.year=="2011")
+tagging_2012 <- subset(tagging, Release.year=="2012")
 ```
 
 ## Tables 4.1 - 4.3: Summarize Minas Passage detections in 2011 and 2012  
 ```{r} 
+### FOR 2010
+MP_2010$MP_Array <- MP_2010$Array
+MP_2010$MP_Array <- as.character(MP_2010$MP_Array)
+MP_2010$MP_Array[MP_2010$MP_Array =="NSP"] <- "FORCE"
+
+FORCE_2010 <- subset(MP_2010, MP_Array=="FORCE")
+
+MP_2010_ind_array <- ddply(.data=MP_2010,
+                           .(MP_Array, Capture.location),
+                           summarize,
+                           n=length(unique(Fish.code)))
+
+MP_2010_group_array <- ddply(.data=MP_2010,
+                           .(MP_Array),
+                           summarize,
+                           n=length(unique(Fish.code)))
+
+MP_2010_group_all <- ddply(.data=MP_2010,
+                           .(Capture.location),
+                           summarize,
+                           n=length(unique(Fish.code)))
+
+length(unique(MP_2010$Fish.code))
+
+MP_2010$Date.and.Time..UTC. <- ymd_hms(MP_2010$Date.and.Time..UTC.)
+MP_2010$Date <- floor_date(MP_2010$Date.and.Time..UTC., unit="day")
+
+MP_2010_ddays <- ddply(.data=MP_2010,
+                       .(MP_Array, Capture.location),
+                       summarize,
+                       n=length(unique(Date)))
+MP_2010_ddays_2 <- ddply(.data=MP_2010,
+                       .(MP_Array),
+                       summarize,
+                       n=length(unique(Date)))
+MP_2010_ddays_3 <- ddply(.data=MP_2010,
+                       .(Capture.location),
+                       summarize,
+                       n=length(unique(Date)))
+length(unique(MP_2010$Date))
+
+### FOR 2011
 MP_2011$MP_Array <- MP_2011$Station.Name
 MP_2011$MP_Array <- as.character(MP_2011$MP_Array)
 MP_2011$MP_Array[MP_2011$MP_Array %in% c("AUL-T1", "AUL-T2", "AUL-T3")] <- "FORCE"
@@ -52,24 +97,28 @@ length(unique(MP_2011$Fish.code))
 FORCE_2011 <- subset(MP_2011, Station.Name=="AUL-T3"|Station.Name=="AUL-T2"|Station.Name=="AUL-T1")
 length(unique(FORCE_2011$Fish.code))
 
-# MP_2011_ind_array <- ddply(.data=MP_2011,
-#                            .(MP_Array, Capture.location),
-#                            summarize,
-#                            n=length(unique(Fish.code)))
-# 
-# MP_2011_group_array <- ddply(.data=MP_2011,
-#                            .(MP_Array),
-#                            summarize,
-#                            n=length(unique(Fish.code)))
-# 
-# MP_2011_group_all <- ddply(.data=MP_2011,
-#                            .(Capture.location),
-#                            summarize,
-#                            n=length(unique(Fish.code)))
+MP_2011_ind_array <- ddply(.data=MP_2011,
+                           .(MP_Array, Capture.location),
+                           summarize,
+                           n=length(unique(Fish.code)))
+
+MP_2011_group_array <- ddply(.data=MP_2011,
+                           .(MP_Array),
+                           summarize,
+                           n=length(unique(Fish.code)))
+
+MP_2011_group_all <- ddply(.data=MP_2011,
+                           .(Capture.location),
+                           summarize,
+                           n=length(unique(Fish.code)))
 
 # Calculate number of days at liberty for each fish at each receiver.
 
 #### Separate receiver data by year
+
+passagereceivers2010 <- receiver %>%
+  filter(Deploy.year==2010 & Array %in% c("MPS", "NSP")) %>%
+  arrange(Deploy.Date.and.Time)
 
 passagereceivers2011 <- receiver %>%
   filter(Deploy.year==2011 & Array %in% c("MPS", "NSP")) %>%
@@ -90,6 +139,38 @@ rm(passagereceivers2011_1)
 rm(passagereceivers2011_2)
 
 #### Create dataframe with all combinations of receivers and transmitters
+
+### FOR 2010
+daysatliberty2010 <- expand.grid(Fish.code = tagging_2010$Fish.code, Station.Name = passagereceivers2010$Station.Name)
+
+daysatliberty2010 <-join(daysatliberty2010, passagereceivers2010, by="Station.Name", type="left")
+
+daysatliberty2010 <- select(daysatliberty2010, Fish.code, Array, Station.Name, CDN, Deploy.Date.and.Time, Recover.Date.and.Time, Latitude, Longitude, Receiver, Deploy.year)
+
+daysatliberty2010 <-join(daysatliberty2010, tagging_2010, by="Fish.code", type="left")
+
+daysatliberty2010$tag.end <- daysatliberty2010$Release.date + days(daysatliberty2010$Est.tag.life)
+daysatliberty2010$tag.end <- ymd(daysatliberty2010$tag.end)
+
+daysatliberty2010$Recover.Date.and.Time <- ymd_hms(daysatliberty2010$Recover.Date.and.Time)
+
+daysatliberty2010$end.test <- ifelse(daysatliberty2010$tag.end > daysatliberty2010$Recover.Date.and.Time, "recovery", "tag dead")
+
+daysatliberty2010$true.end <- ifelse(daysatliberty2010$end.test == "recovery", as.character(daysatliberty2010$Recover.Date.and.Time), as.character(daysatliberty2010$tag.end))
+
+daysatliberty2010$Days.at.liberty <- difftime(daysatliberty2010$true.end, daysatliberty2010$Release.date)
+daysatliberty2010$Days.at.liberty <- ceiling(daysatliberty2010$Days.at.liberty)
+daysatliberty2010$Days.at.liberty <- as.numeric(daysatliberty2010$Days.at.liberty)
+
+#mean(daysatliberty2010$Days.at.liberty, na.rm=TRUE)
+
+daysatliberty2010_GP <- subset(daysatliberty2010, Capture.location=="Grand Pré")
+daysatliberty2010_Stew <- subset(daysatliberty2010, Capture.location=="Stewiacke")
+
+#mean(daysatliberty2010_GP$Days.at.liberty, na.rm=TRUE)
+#mean(daysatliberty2010_Stew$Days.at.liberty, na.rm=TRUE)
+
+#### FOR 2011
 daysatliberty2011 <- expand.grid(Fish.code = tagging_2011$Fish.code, Station.Name = passagereceivers2011$Station.Name)
 
 daysatliberty2011 <-join(daysatliberty2011, passagereceivers2011, by="Station.Name", type="left")
@@ -261,6 +342,47 @@ daysatliberty2012_Kings_winter <- subset(daysatliberty2012_winter, Capture.locat
 
 ## Figure 4.1: RIV by fish length scatterplot and model
 ```{r}
+# FOR 2010
+MP_2010$Array <- ifelse(MP_2010$MP_Array=="FORCE", "FORCE", "MPS")
+
+# Isolate date from date/time in new column ("Date"). Careful, "Day" is already a column title.
+MP_2010$Date.and.Time..UTC. <- ymd_hms(MP_2010$Date.and.Time..UTC.)
+MP_2010$Date <- floor_date(MP_2010$Date.and.Time..UTC., unit = "day")
+
+### RESIDENCY INDEX PLOTS (Fish length vs. n detection days)
+
+MP_2010$season <- "Spring/Summer/Fall"
+
+daysatliberty2010_unique <- select(daysatliberty2010, Fish.code, year, Tag.model, Transmitter, Est.tag.life, Capture.location, Total.length, Release.date, tag.end)
+
+daysatliberty2010_unique$end <- as.POSIXct("2010-11-24 00:00:00")
+daysatliberty2010_unique <- unique(daysatliberty2010_unique)
+
+daysatliberty2010_unique$true.end <- ifelse(daysatliberty2010_unique$tag.end < daysatliberty2010_unique$end, as.character(daysatliberty2010_unique$tag.end), as.character(daysatliberty2010_unique$end))
+
+daysatliberty2010_unique$daysatliberty <- as.Date(daysatliberty2010_unique$true.end) - as.Date(daysatliberty2010_unique$Release.date)
+
+MP_2010_cutoff <- subset(MP_2010, Date.and.Time..UTC. < "2010-11-24 00:00:00")
+
+### find number of detection days for each fish
+detectiondays_MP2010_fishlength <- ddply(.data=MP_2010_cutoff,
+                           .(Fish.code,Capture.location, Total.length),
+                           summarize,
+                           n=length(unique(Date)))
+
+### join detection days to days at liberty
+detectiondaysatliberty_MP2010_fishlength <- join(daysatliberty2010_unique, detectiondays_MP2010_fishlength, type="left", by=c("Fish.code", "Total.length"))
+
+detectiondaysatliberty_MP2010_fishlength$n[is.na(detectiondaysatliberty_MP2010_fishlength$n)] <- 0
+
+detectiondaysatliberty_MP2010_fishlength$daysatliberty <- as.character(detectiondaysatliberty_MP2010_fishlength$daysatliberty)
+detectiondaysatliberty_MP2010_fishlength$daysatliberty <- as.numeric(detectiondaysatliberty_MP2010_fishlength$daysatliberty)
+
+### calculate proportion of days at liberty detected
+detectiondaysatliberty_MP2010_fishlength$propDaL <- detectiondaysatliberty_MP2010_fishlength$n / detectiondaysatliberty_MP2010_fishlength$daysatliberty
+
+
+# FOR 2011
 # Edit array names
 MP_2011$Array <- ifelse(MP_2011$Station.Name=="AUL-T1" | MP_2011$Station.Name=="AUL-T2" | 
                         MP_2011$Station.Name=="AUL-T3", "FORCE", 
@@ -347,11 +469,19 @@ detectiondaysatliberty_MP2012_fishlength$propDaL <- detectiondaysatliberty_MP201
 
 ## join 2011 and 2012 for new plot
 
+detectiondaysatliberty_MP2010_fishlength <- subset(detectiondaysatliberty_MP2010_fishlength, select=c("Fish.code", "year", "Tag.model", "Transmitter", "Est.tag.life", "Capture.location", "Total.length", "Release.date", "tag.end", "end", "true.end", "daysatliberty", "n", "propDaL"))
+
 detectiondaysatliberty_MP2011_fishlength <- subset(detectiondaysatliberty_MP2011_fishlength, select=c("Fish.code", "year", "Tag.model", "Transmitter", "Est.tag.life", "Capture.location", "Length", "Release.date.time", "tag.end", "end", "true.end", "daysatliberty", "n", "propDaL"))
 
 detectiondaysatliberty_MP2012_fishlength <- subset(detectiondaysatliberty_MP2012_fishlength, select=c("Fish.code", "year", "Tag.model", "Transmitter", "Est.tag.life", "Capture.location", "Length", "Release.date.time", "tag.end", "end", "true.end", "daysatliberty", "n", "propDaL"))
 
 detectiondays_fishlength <- rbind(detectiondaysatliberty_MP2011_fishlength, detectiondaysatliberty_MP2012_fishlength)
+
+names(detectiondaysatliberty_MP2010_fishlength) <- c("Fish.code", "year", "Tag.model", "Transmitter", "Est.tag.life", 
+                                                     "Capture.location", "Length", "Release.date.time", "tag.end","end",
+                                                     "true.end", "daysatliberty", "n", "propDaL")
+detectiondaysatliberty_MP2010_fishlength$Length <- detectiondaysatliberty_MP2010_fishlength$Length/100
+detectiondays_fishlength <- rbind(detectiondays_fishlength, detectiondaysatliberty_MP2010_fishlength)
 
 detectiondays_fishlength <- subset(detectiondays_fishlength, propDaL > 0)
 
@@ -383,6 +513,79 @@ modelsel3 <- model.sel(rivMP_glm_1, rivMP_glm_2, rivMP_glm_3, rivMP_glm_4, rivMP
 
 ## Figures 4.2 and 4.3: Presence/absence plots
 ```{r}
+# FOR 2010
+# Get release dates and tag life
+
+tagging_2010$tag.end <- as.Date(tagging_2010$Release.date) + 
+  days(as.numeric(tagging_2010$Est.tag.life))
+tagging_2010$Release.date <- ymd(tagging_2010$Release.date)
+tagging_2010$Release.date <- as.Date(tagging_2010$Release.date)
+tagging_2010$Release.date <- as.POSIXct(tagging_2010$Release.date)
+tagging_2010$tag.end <- as.POSIXct(tagging_2010$tag.end)
+
+# simplify data to 1 detection/array/day
+MP_2010_array <- select(MP_2010, Array, Fish.code, Capture.location, Date) 
+dailypresence_MP2010 <- unique(MP_2010_array)
+dailypresence_MP2010$Fish.code <- as.character(dailypresence_MP2010$Fish.code)
+dailypresence_MP2010$Fish.code <- as.factor(dailypresence_MP2010$Fish.code)
+
+dailypresence_MP2010$Fish.code <- factor(dailypresence_MP2010$Fish.code, levels=
+                               c("S-0-01",  "S-0-02", "S-0-03", "S-0-04", "S-0-05", 
+                                 "S-0-06", "S-0-07", "S-0-08", "S-0-09","S-0-10", 
+                                 "S-0-11", "S-0-12", "S-0-13", "S-0-14", "S-0-15", 
+                                 "S-0-16", "S-0-17", "S-0-18", "S-0-19", "S-0-20",
+                                 "S-0-21", "S-0-22", "S-0-23", "S-0-24", "S-0-25", 
+                                 "S-0-26", "S-0-27", "S-0-28", "S-0-29", "S-0-30",
+                                 "S-0-31", "S-0-32", "S-0-33", "S-0-34", "S-0-35", 
+                                 "S-0-36", "S-0-37", "S-0-38", "S-0-39", "S-0-40",
+                                 "S-0-41", "S-0-42", "S-0-43", "G-0-44", "G-0-45",
+                                 "G-0-46", "G-0-47", "G-0-48", "G-0-49", "G-0-50",
+                                 "G-0-51", "G-0-52", "G-0-53", "G-0-54", "G-0-55",
+                                 "G-0-56", "G-0-57", "G-0-58", "G-0-59", "G-0-60",
+                                 "G-0-61", "G-0-62", "G-0-63", "G-0-64", "G-0-65",
+                                 "G-0-66", "G-0-67", "G-0-68", "G-0-69", "G-0-70",
+                                 "G-0-71", "G-0-72", "G-0-73", "G-0-74", "G-0-75",
+                                 "G-0-76", "G-0-77", "G-0-78", "G-0-79", "G-0-80"))
+
+tagging_2010$Fish.code <- factor(tagging_2010$Fish.code, levels=
+                               c("S-0-01",  "S-0-02", "S-0-03", "S-0-04", "S-0-05", 
+                                 "S-0-06", "S-0-07", "S-0-08", "S-0-09","S-0-10", 
+                                 "S-0-11", "S-0-12", "S-0-13", "S-0-14", "S-0-15", 
+                                 "S-0-16", "S-0-17", "S-0-18", "S-0-19", "S-0-20",
+                                 "S-0-21", "S-0-22", "S-0-23", "S-0-24", "S-0-25", 
+                                 "S-0-26", "S-0-27", "S-0-28", "S-0-29", "S-0-30",
+                                 "S-0-31", "S-0-32", "S-0-33", "S-0-34", "S-0-35", 
+                                 "S-0-36", "S-0-37", "S-0-38", "S-0-39", "S-0-40",
+                                 "S-0-41", "S-0-42", "S-0-43", "G-0-44", "G-0-45",
+                                 "G-0-46", "G-0-47", "G-0-48", "G-0-49", "G-0-50",
+                                 "G-0-51", "G-0-52", "G-0-53", "G-0-54", "G-0-55",
+                                 "G-0-56", "G-0-57", "G-0-58", "G-0-59", "G-0-60",
+                                 "G-0-61", "G-0-62", "G-0-63", "G-0-64", "G-0-65",
+                                 "G-0-66", "G-0-67", "G-0-68", "G-0-69", "G-0-70",
+                                 "G-0-71", "G-0-72", "G-0-73", "G-0-74", "G-0-75",
+                                 "G-0-76", "G-0-77", "G-0-78", "G-0-79", "G-0-80"))
+
+dailypresence_MP2010$Date <- as.Date(dailypresence_MP2010$Date)
+tagging_2010$Release.date <- as.Date(tagging_2010$Release.date)
+tagging_2010$tag.end <- as.Date(tagging_2010$tag.end)
+
+
+## PA plot 16*14
+ggplot() + geom_point(data=dailypresence_MP2010, aes(Date, Fish.code, shape=Array), size=5) +
+  theme_bw(base_size=15)+
+  ylab("Fish code") +
+  scale_shape_manual(values=c(2,20))+
+  theme(legend.key=element_blank())+
+  guides(shape=guide_legend(title=NULL), colour=guide_legend(title=NULL))+
+  theme(legend.background=element_rect(fill="white", colour="black", size=0.4)) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.border=element_rect(colour="black"))+
+  geom_point(data=tagging_2010, aes(Release.date, as.factor(Fish.code)), shape=21, size=4) +
+  geom_point(data=tagging_2010, aes(tag.end, as.factor(Fish.code)), shape=4, size=4) +
+  scale_y_discrete(limits=levels(tagging_2010$Fish.code)) +
+  scale_x_date(limits=c(as.Date("2010-06-22"), as.Date("2010-11-29")), breaks=date_breaks("1 month"), labels=date_format("%b"))
+
+
+# FOR 2011
 # Get release dates and tag life
 
 tagging_2011$tag.end <- as.Date(tagging_2011$Release.date) + 
@@ -468,7 +671,8 @@ tagging_2012$Fish.code <- factor(tagging_2012$Fish.code, levels=
                                  "G-2-31", "G-2-32", "G-2-33", "G-2-34", "G-2-35", 
                                  "G-2-36", "G-2-37", "G-2-38", "K-2-39", "K-2-40",
                                  "K-2-41", "K-2-42", "K-2-43", "K-2-44", "K-2-45"))
-require(scales)
+
+
 
 ## PA plot PDF 14x8inches
 ggplot() + 
@@ -490,6 +694,63 @@ ggplot() +
 
 ## Figures 4.4 - 4.6 (plus appendix figures): Spatial distribution
 ```{r}
+# 2010
+
+# Calculate number of detection days per station
+reccounts_dd_2010 <- ddply(.data=MP_2010_cutoff, 
+                             .(Fish.code, Station.Name, Latitude, Longitude, Total.length),
+                           summarize,
+                           n=length(unique(Date)))
+
+map_sp <- readShapeSpatial("/Volumes/Macintosh HD/Users/freyakeyser/Desktop/Shapefiles 2/New_Polygon.shp")
+map <- fortify(map_sp)
+SP <- SpatialPoints(cbind(map$long, map$lat),
+                    proj4string=CRS("+proj=utm +zone=20 +datum=WGS84 +units=m +no_defs "))
+SP2 <- spTransform(SP, CRS("+proj=longlat"))
+map <- cbind(map, SP2)
+map$long <- map$coords.x1
+map$lat <- map$coords.x2
+
+reccounts_dd_2010$Fish.code <- factor(reccounts_dd_2010$Fish.code, 
+                                         levels=c("S-0-01",  "S-0-02", "S-0-03", "S-0-04", "S-0-05", 
+                                 "S-0-06", "S-0-07", "S-0-08", "S-0-09","S-0-10", 
+                                 "S-0-11", "S-0-12", "S-0-13", "S-0-14", "S-0-15", 
+                                 "S-0-16", "S-0-17", "S-0-18", "S-0-19", "S-0-20",
+                                 "S-0-21", "S-0-22", "S-0-23", "S-0-24", "S-0-25", 
+                                 "S-0-26", "S-0-27", "S-0-28", "S-0-29", "S-0-30",
+                                 "S-0-31", "S-0-32", "S-0-33", "S-0-34", "S-0-35", 
+                                 "S-0-36", "S-0-37", "S-0-38", "S-0-39", "S-0-40",
+                                 "S-0-41", "S-0-42", "S-0-43", "G-0-44", "G-0-45",
+                                 "G-0-46", "G-0-47", "G-0-48", "G-0-49", "G-0-50",
+                                 "G-0-51", "G-0-52", "G-0-53", "G-0-54", "G-0-55",
+                                 "G-0-56", "G-0-57", "G-0-58", "G-0-59", "G-0-60",
+                                 "G-0-61", "G-0-62", "G-0-63", "G-0-64", "G-0-65",
+                                 "G-0-66", "G-0-67", "G-0-68", "G-0-69", "G-0-70",
+                                 "G-0-71", "G-0-72", "G-0-73", "G-0-74", "G-0-75",
+                                 "G-0-76", "G-0-77", "G-0-78", "G-0-79", "G-0-80"))
+
+reccounts_dd_2010$Fish.code <- factor(reccounts_dd_2010$Fish.code , levels = reccounts_dd_2010[order(reccounts_dd_2010$Total.length), 1])
+
+##PDF 12x11
+ggplot() + geom_polygon(data=map, aes(x=long, y=lat, group=group, fill=hole)) + #geom_path(data=map, aes(x=long, y=lat, group=group, fill=hole), colour="black") +
+  theme_bw(base_size=15) +
+  coord_equal() +
+  scale_fill_manual(values=c("grey", "white"), guide="none") +
+  coord_cartesian(xlim = c(-64.5, -64.35), ylim = c(45.31, 45.39)) +
+  theme(legend.background=element_rect(fill="white", colour="black", size=0.4)) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.border=element_rect(colour="black")) +
+  geom_point(data=reccounts_dd_2010, aes(Longitude, Latitude, size=n), alpha=0.6)+
+  geom_point(data=passagereceivers2010, aes(Longitude, Latitude), shape=21, size=2)+
+  xlab("Longitude") +
+  ylab("Latitude") + 
+  facet_wrap(~Fish.code) +
+  scale_size(breaks=c(2, 4, 6, 8, 10), range=c(3, 10)) + 
+  theme(axis.text.x = element_text(colour="black", size=rel(0.75), angle=90, hjust=1, vjust=0.5), axis.text.y = element_text(colour="black", size=rel(0.75)), panel.border=element_rect(colour="black", fill=NA, linetype="solid"), strip.background=element_rect(colour="black", fill="lightgrey", linetype="solid", size=0.25)) +
+  theme(panel.margin = unit(0.5, "lines")) +
+  labs(size="Number of\ndetection days", x="Latitude", y="Longitude") 
+
+
+
 
 # 2011
 
@@ -499,7 +760,7 @@ reccounts_dd_2011 <- ddply(.data=MP_2011_cutoff,
                            summarize,
                            n=length(unique(Date)))
 
-map_sp <- readShapeSpatial("/Users/freyakeyser/Desktop/Shapefiles/New_Polygon.shp")
+map_sp <- readShapeSpatial("/Volumes/Macintosh HD/Users/freyakeyser/Desktop/Shapefiles 2/New_Polygon.shp")
 map <- fortify(map_sp)
 SP <- SpatialPoints(cbind(map$long, map$lat),
                     proj4string=CRS("+proj=utm +zone=20 +datum=WGS84 +units=m +no_defs "))
@@ -637,8 +898,8 @@ coords <- subset(receiver_2012, (Array=="NSP" & CDN==2) | (Array=="MPS" & CDN==3
 
 coords <- coords[,c(3,7,8)]
 names(coords) <- c("Station.Name", "Lat.fixed", "Long.fixed")
-MP_2012_join_summer <- join(MP_2012_summer, coords, type="full")
-MP_2012_join_winter <- join(MP_2012_winter, coords, type="full")
+MP_2012_join_summer <- join(MP_2012_summer, coords, type="left")
+MP_2012_join_winter <- join(MP_2012_winter, coords, type="left")
 
 # Calculate number of detection days
 reccounts_dd_2012_summer <- ddply(.data=MP_2012_join_summer, 
@@ -658,15 +919,15 @@ map$long <- map$coords.x1
 map$lat <- map$coords.x2
 
 # Re-order names
+reccounts_dd_2012_summer$Fish.code <- as.character(reccounts_dd_2012_summer$Fish.code)
 
-#reccounts_dd_2012_summer$Fish.code <- factor(reccounts_dd_2012_summer$Fish.code, 
+reccounts_dd_2012_summer$Fish.code <- factor(reccounts_dd_2012_summer$Fish.code, 
                                                 levels = c("G-2-21", "G-2-23", "G-2-24", "G-2-28", "G-2-37",
                                                    "S-2-06", "G-2-12", "G-2-13", "G-2-17", "G-2-18",
                                                   "S-2-01", "S-2-02", "S-2-03", "S-2-04", "S-2-05",
                                                   "K-2-40", "K-2-44"))
 
 reccounts_dd_2012_summer$Fish.code <- factor(reccounts_dd_2012_summer$Fish.code , levels = reccounts_dd_2012_summer[order(reccounts_dd_2012_summer$Length), 1])
-reccounts_dd_2012_summer <- reccounts_dd_2012_summer[1:127,]
 
 ### PDF 10x8 inches
 ggplot() + geom_polygon(data=map, aes(x=long, y=lat, group=group, fill=hole)) + #geom_path(data=map, aes(x=long, y=lat, group=group, fill=hole), colour="black") +
@@ -707,7 +968,6 @@ ggplot() + geom_polygon(data=map, aes(x=long, y=lat, group=group, fill=hole)) + 
   theme(panel.margin = unit(0.5, "lines")) +
   labs(size="Number of\ndetection days", x="Latitude", y="Longitude") 
 
-###### HERE #####
 
 # Separate winter
 MP_2012_join_winter <- subset(MP_2012_join_winter, year==2013 | month==12)
@@ -909,6 +1169,84 @@ G223<- subset(alldata, Fish.code=="G-2-23")
 unique(G223$month)
 ```
 
+## Depths dataframe (Filter out duplicates) - MP 2010
+```{r}
+stew_depths <- read.csv("/Volumes/Macintosh HD/Users/freyakeyser/Documents/Acadia/ACER/Striped Bass - 2010/VUE_Export_2010StewiackeSensors_SB_2016-02-04.csv")
+
+stew_depths <- subset(stew_depths, select=c("Date.and.Time..UTC.", "Receiver", "Transmitter", "Sensor.Value")) 
+
+# Make data format consistent between spreadsheets
+stew_depths$Receiver <- as.factor(stew_depths$Receiver)
+
+cols <- colsplit(stew_depths$Receiver, "-", c("alpha", "numeric"))
+cols$complete <- ifelse(is.na(cols$numeric), cols$alpha, cols$numeric)
+stew_depths$Receiver <- as.character(cols$complete)
+
+stew_depths$Transmitter <- as.factor(stew_depths$Transmitter)
+
+cols <- colsplit(stew_depths$Transmitter, "-", c("alpha", "middle", "numeric"))
+stew_depths$Transmitter <- as.character(cols$numeric)
+
+names(stew_depths) <- c("Date.and.Time..UTC.", "Receiver", "Sensor.ID", "Sensor.Value")
+
+stew_depths <- join(stew_depths, passagereceivers2010, type="inner")
+
+trans <- data.frame(Transmitter=rep(NA, 43), Sensor.ID=rep(NA, 43))
+trans$Transmitter <- c(30164:30179, 34965:34991)
+trans$Sensor.ID <- c(82:97, 98, 47:63, 99:107)
+
+stew_depths <- join(stew_depths, trans, type="left")
+stew_depths <- join(stew_depths, tagging_2010, type="left", by="Transmitter")
+
+stew_depths <- subset(stew_depths, select=c("Date.and.Time..UTC.", "Fish.code", "Array", "Sensor.Value", "Station.Name"))
+names(stew_depths) <- c("Date.and.Time..UTC.", "Fish.code", "Array", "Detection.depth", "Station.Name")
+
+stew_depths$Date.and.Time..UTC. <- ymd_hms(stew_depths$Date.and.Time..UTC.)
+stew_depths$Array <- as.character(stew_depths$Array)
+
+MP_2010$Detection.depth <- MP_2010$Sensor.Value
+MP_2010_depths <- subset(MP_2010, select=c("Date.and.Time..UTC.", "Fish.code", "Array", "Detection.depth", "Station.Name"))
+
+MP_2010_depths <- rbind(MP_2010_depths, stew_depths)
+MP_2010_depths <- MP_2010_depths[!is.na(MP_2010_depths$Detection.depth),]
+
+sorted_MP_2010 <- MP_2010_depths[order(MP_2010_depths$Fish.code, MP_2010_depths$Date.and.Time..UTC.),]
+
+sorted_MP_2010$row.names2 <- c(1:length(sorted_MP_2010$Date.and.Time..UTC.))
+
+diffs_MP_2010<-c(NA, (sorted_MP_2010$Date.and.Time..UTC.[2:1879] - sorted_MP_2010$Date.and.Time..UTC.[1:1878]))
+  
+inds_MP_2010<-c(NA, sorted_MP_2010$Fish.code[2:1879]==sorted_MP_2010$Fish.code[1:1878])
+
+trans_MP_2010<-c(NA, sorted_MP_2010$Detection.depth[2:1879]-sorted_MP_2010$Detection.depth[1:1878]==0)
+
+sorted_MP_2010$diffs <- diffs_MP_2010
+sorted_MP_2010$inds <- inds_MP_2010
+sorted_MP_2010$trans <- trans_MP_2010
+
+sorted_MP_2010$cond <- ifelse(sorted_MP_2010$inds==TRUE & 
+         sorted_MP_2010$trans==TRUE &
+         diffs_MP_2010<=40, sorted_MP_2010$row.names2-1, sorted_MP_2010$row.names2)
+
+sorted_MP_2010$cond2 <- ifelse(sorted_MP_2010$inds==TRUE & 
+                                sorted_MP_2010$trans==TRUE &
+                                diffs_MP_2010<=40, "YES", "NO")
+
+sorted_MP_2010$cond3 <- ifelse(sorted_MP_2010$cond2=="YES" &
+                                diffs_MP_2010>0, "YES", "NO")
+
+detects_filtered_MP_2010 <- subset(sorted_MP_2010, select=c("Fish.code", "Array", "Detection.depth", "Station.Name", "diffs", "inds", "trans", "cond", "cond2", "cond3", "Date.and.Time..UTC."))
+
+detects_final_MP_2010 <-
+  detects_filtered_MP_2010 %>%
+  select(Date.and.Time..UTC., Fish.code, Array, Detection.depth, Station.Name, diffs, inds, trans, cond, cond2, cond3) %>%
+  filter(!cond2=="YES")
+
+detects_final_MP_2010$Detection.depth <- as.numeric(detects_final_MP_2010$Detection.depth)
+
+```
+
+
 ## Depths dataframe (Filter out duplicates) - MP 2011
 ```{r}
 
@@ -959,11 +1297,11 @@ MP_2012_depths <-
 
 MP_2012_depths$row.names2 <- c(1:length(MP_2012_depths$Date.and.Time..UTC.))
 
-MP_2012_depths$diffs<-c(NA, (MP_2012_depths$Date.and.Time..UTC.[2:8632] - MP_2012_depths$Date.and.Time..UTC.[1:8631]))
+MP_2012_depths$diffs<-c(NA, (MP_2012_depths$Date.and.Time..UTC.[2:10149] - MP_2012_depths$Date.and.Time..UTC.[1:10148]))
   
-MP_2012_depths$inds<-c(NA, MP_2012_depths$Fish.code[2:8632]==MP_2012_depths$Fish.code[1:8631])
+MP_2012_depths$inds<-c(NA, MP_2012_depths$Fish.code[2:10149]==MP_2012_depths$Fish.code[1:10148])
 
-MP_2012_depths$trans<-c(NA, MP_2012_depths$Detection.depth[2:8632]-MP_2012_depths$Detection.depth[1:8631]==0)
+MP_2012_depths$trans<-c(NA, MP_2012_depths$Detection.depth[2:10149]-MP_2012_depths$Detection.depth[1:10148]==0)
 
 MP_2012_short <- subset(MP_2012_depths, Fish.code=="G-2-08" | Fish.code=="G-2-35" | Fish.code=="G-2-38" |
                                  Fish.code=="G-2-12" | Fish.code=="G-2-11" | Fish.code=="G-2-36" |
@@ -1025,6 +1363,8 @@ names(detects_final_MP_2011)
 names(detects_final_MP_2012) <- c("Date.and.Time..UTC.", "Fish.code", "Array", "Detection.depth", "Station.Name", "diffs", "inds", "trans", "cond", "cond2", "cond3", "season")
 detects_final_MP <- join(detects_final_MP_2011, detects_final_MP_2012, type="full")
 detects_final_MP$season[is.na(detects_final_MP$season)] <- "Spring/Summer/Fall"
+
+detects_final_MP <- join(detects_final_MP, detects_final_MP_2010, type="full")
 ```
 
 ## Depths dataframe (Filter out duplicates) - FORCE both years
@@ -1073,6 +1413,16 @@ detects_final_force <- subset(detects_final_MP, Array =="FORCE")
 ## Depths distribution
 ```{r}
 ### HERE ###
+## MP_2010
+#### Individual depth distribution histograms
+ggplot() + 
+  geom_histogram(data=detects_final_MP_2010, aes(Detection.depth), binwidth=10) +
+  facet_wrap(~Fish.code) +
+  coord_flip() +
+  scale_x_reverse() +
+  ylab("Frequency") +
+  xlab("Detection depth (m)") +
+  figure_theme
 
 ## MP_2011
 #### Individual depth distribution histograms
@@ -1143,9 +1493,7 @@ ggplot() +
   xlab("Detection depth (m)") +
   ylab("Density")
 
-detects_final_MP <- join(detects_final_MP_2011, detects_final_MP_2012, type="full")
-unique(detects_final_MP$Station.Name)
-#write.csv(detects_final_MP, "/Users/freyakeyser/Documents/Acadia/ACER/Masters/Overall spreadsheets:figures/Passage/Filtered MP detections.csv")
+#write.csv(detects_final_MP, "/Volumes/Macintosh HD/Users/freyakeyser/Documents/Acadia/ACER/Masters/Overall spreadsheets:figures/Passage/Filtered MP detections_2010-2013_Jan2016.csv")
 
 all <- ggplot() + 
   geom_density(data=detects_final_MP, aes(Detection.depth), fill="gray") +
@@ -1225,6 +1573,15 @@ density2011 <- ggplot() +
   ylab("Density") +
   ggtitle("Spring/Summer/Fall 2011")
 
+density2010 <- ggplot() + 
+  geom_density(data=detects_final_MP_2010, aes(Detection.depth), fill="gray") +
+  coord_flip() +
+  scale_x_reverse(limits=c(125, 0), breaks=c(0, 25, 50, 75, 100, 125))+
+  figure_theme +
+  xlab("Detection depth (m)") +
+  ylab("Density") +
+  ggtitle("Spring/Summer/Fall 2010")
+
 ## FORCE
 #### Individual depth distribution histograms
 ggplot() + #geom_density(data=detects_final_force, aes(Detection.depth), binwidth=10) + ###BAD  
@@ -1241,25 +1598,26 @@ ggplot() + geom_boxplot(data=detects_final_force, aes(Fish.code, Detection.depth
   geom_vline(xintercept = 14.5, linetype = "longdash")
 
 densityforce <- ggplot() + 
-  geom_density(data=detects_final_force, aes(Detection.depth)) +
+  geom_density(data=detects_final_force, aes(Detection.depth), fill="gray") +
   coord_flip() +
   scale_x_reverse(limits=c(125, 0), breaks=c(0, 25, 50, 75, 100, 125))+
   figure_theme +
   xlab("Detection depth (m)") +
   ylab("Density") +
-  ggtitle("FORCE 2011 and 2012") 
+  ggtitle("FORCE 2010, 2011 and 2012") 
 
 
 grid.arrange(all, density2011, density2012_winter, density2012_summer, ncol=2)
 
 grid.newpage() # Open a new page on grid device
-pushViewport(viewport(layout = grid.layout(2,4)))
+pushViewport(viewport(layout = grid.layout(3,3)))
 print(all, vp = viewport(layout.pos.row = 1:2, layout.pos.col = 1:2))
-print(density2011, vp = viewport(layout.pos.row = 1, layout.pos.col = 3)) 
-print(density2012_summer, vp = viewport(layout.pos.row = 2, layout.pos.col = 3))
-print(density2012_winter, vp = viewport(layout.pos.row = 2, layout.pos.col = 4))
-print(densityforce, vp = viewport(layout.pos.row = 1, layout.pos.col = 4))
-
+print(density2010, vp = viewport(layout.pos.row = 3, layout.pos.col = 1)) 
+print(density2011, vp = viewport(layout.pos.row = 3, layout.pos.col = 2)) 
+print(density2012_summer, vp = viewport(layout.pos.row = 3, layout.pos.col = 3))
+print(density2012_winter, vp = viewport(layout.pos.row = 2, layout.pos.col = 3))
+print(densityforce, vp = viewport(layout.pos.row = 1, layout.pos.col = 3))
+### 12*8
 ?scale_x_date
 
 ## Day/night
@@ -1296,14 +1654,12 @@ ggplot() + geom_density(data=detects_final_MP, aes(Detection.depth), binwidth=5,
   facet_grid(season~daynight) +
   xlab("Swimming depth (m)") +
   ylab("Density") +
-#   theme_bw(base_size=15)+
-#   theme(panel.grid.major = element_blank(),
-#       panel.grid.minor = element_blank(), panel.margin = unit(1, "lines")) +
+  scale_y_continuous(limits=c(0,0.12), breaks=c(0,0.05,0.1), labels=c(0, 0.05, 0.1)) +
   coord_flip() +
   scale_x_reverse() +
-  geom_text(data=detects_final_MP_summary, aes(x=11, y=0.1, label=n), 
+  geom_text(data=detects_final_MP_summary, aes(x=11, y=0.12, label=n), 
                     colour="black", inherit.aes=FALSE, parse=FALSE, hjust=1)+
-  geom_text(data=detects_final_MP_summary_2, aes(x=1, y=0.1, label=n), 
+  geom_text(data=detects_final_MP_summary_2, aes(x=1, y=0.12, label=n), 
                     colour="black", inherit.aes=FALSE, parse=FALSE, hjust=1) +
   figure_theme
 
@@ -1325,6 +1681,8 @@ detects_final_force$sunsetUTC <- mp.sunsettime$time
 
 detects_final_force$daynight <- ifelse(detects_final_force$Date.and.Time..UTC. < detects_final_force$sunrise | detects_final_force$Date.and.Time..UTC. > detects_final_force$sunset,  "Night", "Day")
 
+detects_final_force$season[is.na(detects_final_force$season)] <- "Spring/Summer/Fall"
+
 ##### Text for plots
 detects_final_force_summary <- ddply(.data=detects_final_force, 
                  .(season, daynight), 
@@ -1336,6 +1694,8 @@ detects_final_force_summary_2 <- ddply(.data=detects_final_force,
                  summarize, 
                  n=paste(length(unique(Fish.code)), "individuals"))
 
+
+# 9*7.5
 ggplot() + geom_density(data=detects_final_force, aes(Detection.depth), binwidth=5, fill="grey") +
   facet_grid(season~daynight) +
   xlab("Swimming depth (m)") +
@@ -1642,6 +2002,77 @@ grid_arrange_shared_legend(AUL2011hist, MPS2011hist, AUL2012hist, MPS2012hist)
 ## Statistical testing (May 12)
 ```{r}
 ### Table 4.2: Comparing proportions of Stewiacke and GP fish at each receiver array
+
+# FOR 2010
+countMPS <- matrix(c(12,25,40,3), nrow=2)
+qchisq(0.95,1)
+chisq.test(countMPS)
+chisq.test(countMPS, correct=F)
+#   Pearson's Chi-squared test
+# 
+# data:  countMPS
+# X-squared = 32.0932, df = 1, p-value = 1.47e-08
+### SO: reject null hypothesis that MPS presence and Tagging Group are independent. 
+
+fisher.test(countMPS)
+#   Fisher's Exact Test for Count Data
+# 
+# data:  countMPS
+# p-value = 1.155e-08
+# alternative hypothesis: true odds ratio is not equal to 1
+# 95 percent confidence interval:
+#  0.006265421 0.154643246
+# sample estimates:
+# odds ratio 
+# 0.03806031 
+
+
+countFOR <- matrix(c(4,33,20,23), nrow=2)
+qchisq(0.95,1)
+chisq.test(countFOR)
+chisq.test(countFOR, correct=F)
+#   Pearson's Chi-squared test
+# 
+# data:  countFOR
+# X-squared = 12.0703, df = 1, p-value = 0.0005123
+### SO: reject null hypothesis that FORCE presence and Tagging Group are independent. 
+
+fisher.test(countFOR)
+#   Fisher's Exact Test for Count Data
+# 
+# data:  countFOR
+# p-value = 0.0005639
+# alternative hypothesis: true odds ratio is not equal to 1
+# 95 percent confidence interval:
+#  0.03136064 0.50329275
+# sample estimates:
+# odds ratio 
+#  0.1429179 
+
+countMP <- matrix(c(12,68,40,40), nrow=2)
+qchisq(0.95,1)
+chisq.test(countMP)
+chisq.test(countMP, correct=F)
+#   Pearson's Chi-squared test
+# 
+# data:  countMP
+# X-squared = 22.3362, df = 1, p-value = 2.289e-06
+### SO: reject null hypothesis that MP presence and Tagging Group are independent. 
+
+fisher.test(countMP)
+#   Fisher's Exact Test for Count Data
+# 
+# data:  countMP
+# p-value = 3.516e-06
+# alternative hypothesis: true odds ratio is not equal to 1
+# 95 percent confidence interval:
+#  0.07593269 0.39514217
+# sample estimates:
+# odds ratio 
+#  0.1785255 
+
+
+# FOR 2011
 prop.test(c(7,20), c(15,20))
 
 countMPS <- matrix(c(7,13,15,5), nrow=2)
